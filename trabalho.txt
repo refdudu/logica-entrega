@@ -1,0 +1,30 @@
+Trabalho Prático Final
+
+Descrição:
+O trabalho prático final deverá ser desenvolvido em grupo de 2 a 4 integrantes. O objetivo é selecionar um problema do cotidiano e propor uma solução utilizando quatro (4) das técnicas de Inteligência Artificial estudadas em aula.
+
+Técnicas disponíveis:
+Busca em Profundidade
+Busca em Amplitude
+Algoritmo A*
+Redes Neurais Artificiais (RNAs)
+Algoritmo Genético
+Lógica Fuzzy
+
+Orientações gerais:
+O grupo deve definir claramente o problema escolhido, justificando sua relevância.
+É necessário explicar como cada técnica foi aplicada na resolução do problema.
+O trabalho deve apresentar resultados, análises e conclusões sobre a eficácia das abordagens utilizadas.
+A entrega deve incluir breve relatório escrito, apresentação utilizada e demonstração prática do código elaborado.
+
+Entrega:
+Breve relatório técnico (PDF)
+Apresentação elaborada (PDF)
+Arquivos de código desenvolvido
+Critérios de Avaliação:
+Clareza na definição do problema (15%)
+Aplicação correta das técnicas (40%)
+Análise e interpretação dos resultados (25%)
+Organização e apresentação do trabalho (15%)
+Peso: 50 Pontos
+Tempo de Apresentação: 15 minutos
