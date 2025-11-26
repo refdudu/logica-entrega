@@ -1,10 +1,14 @@
 import tkinter as tk
 from tkinter import messagebox
 
-import ai_core
-import random
 from ui.map_view import MapView
 from ui.control_panel import ControlPanel
+
+from ai_models.data_structures import Order
+from ai_models.fuzzy_logic import FuzzyPriority
+from ai_models.neural_network import NeuralPredictor
+from ai_models.genetic_algorithm import GeneticTSP
+from ai_models.a_star_search import AStarNavigator
 
 class LogisticsApp:
     def __init__(self, root):
@@ -18,9 +22,9 @@ class LogisticsApp:
         self.optimized_sequence = []
         
         # AI Engines
-        self.fuzzy_engine = ai_core.FuzzyPriority()
-        self.neural_engine = ai_core.NeuralPredictor()
-        self.astar_engine = ai_core.AStarNavigator(grid_size=20)
+        self.fuzzy_engine = FuzzyPriority()
+        self.neural_engine = NeuralPredictor()
+        self.astar_engine = AStarNavigator(grid_size=20)
 
         # Setup UI
         self.setup_ui()
