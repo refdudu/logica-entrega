@@ -5,8 +5,9 @@ from sklearn.neural_network import MLPClassifier
 class NeuralPredictor:
     def __init__(self):
         # Treinamento Simulado (Mock Training)
-        # Features: [Peso, Chuva, Prioridade(Fuzzy)]
-        # A rede aprende que Peso alto + Chuva = Atraso
+        # Features: [Peso, PriorityClass, Prioridade(Fuzzy)]
+        # PriorityClass: 0 (Normal), 1 (VIP)
+        # A rede aprende que Peso alto + VIP = Atraso (exemplo)
         X_train = [
             [2, 0, 8], [20, 1, 2], [5, 0, 5], [30, 1, 9], 
             [1, 1, 4], [15, 0, 6], [10, 1, 5], [25, 1, 3]
@@ -18,7 +19,7 @@ class NeuralPredictor:
 
     def predict(self, order):
         # Usa a prioridade calculada pelo Fuzzy como input!
-        features = [[order.weight, order.rain, order.priority]]
+        features = [[order.weight, order.priority_class, order.priority]]
         pred = self.clf.predict(features)[0]
         prob = self.clf.predict_proba(features)[0][pred]
         

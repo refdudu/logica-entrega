@@ -32,13 +32,20 @@ class ControlPanel(tk.Frame):
         tk.Frame(self, height=2, bd=1, relief=tk.SUNKEN).pack(fill=tk.X, padx=5, pady=10)
 
         # Tabela de Pedidos
-        self.tree = ttk.Treeview(self, columns=('ID', 'Pri', 'Risco'), show='headings', height=15)
+        self.tree = ttk.Treeview(self, columns=('ID', 'Peso', 'Prazo', 'VIP', 'Pri', 'Risco'), show='headings', height=15)
         self.tree.heading('ID', text='ID')
+        self.tree.heading('Peso', text='Peso (kg)')
+        self.tree.heading('Prazo', text='Prazo (min)')
+        self.tree.heading('VIP', text='VIP')
         self.tree.heading('Pri', text='Prioridade')
         self.tree.heading('Risco', text='Risco Atraso')
-        self.tree.column('ID', width=40)
-        self.tree.column('Pri', width=80)
-        self.tree.column('Risco', width=100)
+        
+        self.tree.column('ID', width=30)
+        self.tree.column('Peso', width=60)
+        self.tree.column('Prazo', width=70)
+        self.tree.column('VIP', width=40)
+        self.tree.column('Pri', width=60)
+        self.tree.column('Risco', width=80)
         self.tree.pack(pady=20, fill=tk.X)
 
     def get_order_count(self):
@@ -54,7 +61,8 @@ class ControlPanel(tk.Frame):
         for i in self.tree.get_children():
             self.tree.delete(i)
         for o in orders:
-            self.tree.insert('', 'end', values=(o.id, f"{o.priority:.1f}", o.delay_risk))
+            vip_str = "Sim" if o.priority_class == 1 else "Não"
+            self.tree.insert('', 'end', values=(o.id, o.weight, int(o.deadline), vip_str, f"{o.priority:.1f}", o.delay_risk))
 
     def set_nav_button_state(self, state):
         self.nav_button.config(state=state)

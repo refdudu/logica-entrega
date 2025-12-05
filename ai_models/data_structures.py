@@ -2,15 +2,14 @@ import numpy as np
 
 # Estrutura de Dados para um Pedido
 class Order:
-    def __init__(self, id, x, y, wait_time, weight, rain):
+    def __init__(self, id, node_id, weight, deadline, priority_class):
         self.id = id
-        self.x = x
-        self.y = y
-        self.wait_time = wait_time # minutos
-        self.weight = weight # kg
-        self.rain = rain # 0 ou 1
+        self.node_id = node_id # Graph Node ID
+        self.weight = weight
+        self.deadline = deadline
+        self.priority_class = priority_class
         
-        # Serão preenchidos pelas IAs
-        self.priority = 0.0 # Fuzzy
-        self.delay_risk = "" # Rede Neural
+        # AI Analysis Results
+        self.priority = 0.0
+        self.delay_risk = "BAIXO" # Rede Neural
         self.risk_prob = 0.0
