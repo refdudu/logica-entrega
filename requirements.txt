@@ -1,0 +1,6 @@
+matplotlib
+osmnx
+networkx
+numpy
+scikit-fuzzy # skfuzzy is often installed as scikit-fuzzy
+scikit-learn # sklearn is often installed as scikit-learn
