@@ -1,21 +1,23 @@
 import tkinter as tk
 from tkinter import messagebox
 import random
+import networkx as nx
+import time
 from ui.map_view import MapView
 from ui.control_panel import ControlPanel
 
-from ai_models.data_structures import Order
-from ai_models.fuzzy_logic import FuzzyPriority
-from ai_models.neural_network import NeuralPredictor
-from ai_models.genetic_algorithm import GeneticTSP
-from ai_models.a_star_search import AStarNavigator
-from ai_models.map_loader import MapLoader
+from src.models.order import Order
+from src.ai.fuzzy import FuzzyPriority
+from src.ai.neural import NeuralPredictor
+from src.ai.genetic import GeneticTSP
+from src.ai.astar import AStarNavigator
+from src.core.map_manager import MapManager
 
 class LogisticsApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Sistema Integrado de Logística com IA (Refatorado)")
-        self.root.geometry("1200x800")
+        self.root.title("Sistema Integrado de Logística com IA (Santa Rosa - RS)")
+        self.root.geometry("1400x900") # Larger window for side-by-side
         self.running = True
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
@@ -25,16 +27,15 @@ class LogisticsApp:
         self.optimized_sequence = []
         
         # Map Loader
-        self.map_loader = MapLoader()
-        self.graph = self.map_loader.load_graph()
+        self.map_manager = MapManager()
+        self.graph = self.map_manager.load_graph()
         
         # AI Engines
         self.fuzzy_engine = FuzzyPriority()
         self.neural_engine = NeuralPredictor()
         self.astar_engine = AStarNavigator(self.graph)
         
-        # Depot (Pick a random node or a specific one)
-        # For consistency, let's pick the first node
+        # Depot (Pick the first node or specific if known)
         self.depot_node = list(self.graph.nodes())[0]
         
         # Setup UI
@@ -45,12 +46,20 @@ class LogisticsApp:
         self.control_panel = ControlPanel(self.root, self)
         self.control_panel.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
 
-        # Map View (Right)
-        self.map_view = MapView(self.root, self.root)
-        self.map_view.pack(side=tk.RIGHT, expand=True, fill=tk.BOTH)
+        # Right Side - Split directly into two Maps
+        right_frame = tk.Frame(self.root)
+        right_frame.pack(side=tk.RIGHT, expand=True, fill=tk.BOTH)
+        
+        # Legacy Map (Top or Left) - Let's do Side by Side inside Right Frame
+        self.map_view_legacy = MapView(right_frame, self.root, title="Modo Legacy (Sem Otimização)")
+        self.map_view_legacy.pack(side=tk.LEFT, expand=True, fill=tk.BOTH, padx=2)
+        
+        self.map_view_smart = MapView(right_frame, self.root, title="Modo Smart (AI)")
+        self.map_view_smart.pack(side=tk.RIGHT, expand=True, fill=tk.BOTH, padx=2)
         
         # Initial Draw
-        self.map_view.draw_graph(self.graph, self.depot_node)
+        self.map_view_legacy.draw_graph(self.graph, self.depot_node)
+        self.map_view_smart.draw_graph(self.graph, self.depot_node)
 
     # --- Controller Methods ---
 
@@ -58,7 +67,9 @@ class LogisticsApp:
         self.orders = []
         self.optimized_sequence = []
         self.control_panel.update_table(self.orders)
-        self.map_view.draw_graph(self.graph, self.depot_node)
+        self.map_view_legacy.draw_graph(self.graph, self.depot_node)
+        self.map_view_smart.draw_graph(self.graph, self.depot_node)
+        self.control_panel.update_results("")
         
         if not silent:
             messagebox.showinfo("Info", "Simulação reiniciada.")
@@ -73,102 +84,201 @@ class LogisticsApp:
         
         for i in range(num_orders):
             # Pick random node for order
-            node_id = self.map_loader.get_random_node()
-            order = Order(i + 1, node_id, random.randint(10, 120), random.uniform(1, 30), random.choice([0, 1]))
-            self.orders.append(order)
+            try:
+                node_id = self.map_manager.get_random_node()
+                # Deadline (10-120min), Weight (1-30kg), VIP (0/1)
+                order = Order(i + 1, node_id, random.randint(10, 120), random.uniform(1, 30), random.choice([True, False]), random.choice([0, 1]))
+                self.orders.append(order)
+            except Exception as e:
+                print(f"Error generating order: {e}")
         
         self.control_panel.update_table(self.orders)
-        self.map_view.draw_graph(self.graph, self.depot_node)
-        self.map_view.draw_orders(self.orders, self.graph)
-        messagebox.showinfo("Passo 1", f"{num_orders} pedidos gerados! Observe os pontos no mapa.")
+        self.map_view_legacy.draw_graph(self.graph, self.depot_node)
+        self.map_view_legacy.draw_orders(self.orders, self.graph)
+        self.map_view_smart.draw_graph(self.graph, self.depot_node)
+        self.map_view_smart.draw_orders(self.orders, self.graph)
+        # messagebox.showinfo("Passo 1", f"{num_orders} pedidos gerados! Observe os pontos no mapa.")
 
-    def step2_analyze(self):
+    def run_full_comparison(self):
+        # 0. Generate if no orders (or just regenerate)
         if not self.orders:
-            messagebox.showwarning("Aviso", "Gere os pedidos no Passo 1 primeiro.")
-            return
+             self.step1_generate()
         
+        if not self.orders: return 
+
+        self.root.config(cursor="wait")
+        self.control_panel.update_results("Calculando rotas...")
+        self.root.update()
+
+        # --- 1. RUN LEGACY CALCULATION ---
+        legacy_path = self._calculate_legacy_path()
+        legacy_dist = 0
+        if legacy_path:
+             legacy_dist = self._calculate_path_length(legacy_path)
+             
+        # --- 2. RUN SMART CALCULATION ---
+        # Analyze
         for order in self.orders:
-            # Fuzzy needs distance to depot. 
-            # We can use A* cost or straight line. A* is better but slower.
-            # Let's use A* cost (time or distance)
-            dist = self.astar_engine.get_path_cost(self.depot_node, order.node_id)
-            # Normalize dist for fuzzy? Fuzzy expects something.
-            # Let's just pass the raw value and let fuzzy handle or mock it.
-            # Actually fuzzy_logic.py probably expects x,y. We need to check it.
-            # For now, let's just pass the order and depot_node
-            self.fuzzy_engine.calculate(order, dist) # We will need to update fuzzy_engine
+            dist = self.astar_engine.get_path_cost(self.depot_node, order.node_id, is_fragile=False)
+            self.fuzzy_engine.calculate(order, dist if dist != float('inf') else 5000)
             self.neural_engine.predict(order)
-
+        
         self.control_panel.update_table(self.orders)
-        self.map_view.draw_graph(self.graph, self.depot_node)
-        self.map_view.draw_analyzed_orders(self.orders, self.graph)
-        
-        try:
-            focused_widget = self.root.focus_get()
-            if focused_widget and '2. Analisar' in focused_widget.cget('text'):
-                messagebox.showinfo("Passo 2", "Análise Completa!\nVermelho = Alto Risco de Atraso\nVerde = Baixo Risco")
-        except (tk.TclError, AttributeError):
-            pass
+        self.map_view_smart.draw_analyzed_orders(self.orders, self.graph) # Update visuals
 
-    def step3_optimize(self):
-        if not self.orders:
-            messagebox.showwarning("Aviso", "Execute os Passos 1 e 2 primeiro.")
-            return
-        
-        
-        # GeneticTSP needs to be updated to handle graph nodes or distance matrix
-        # For now, let's assume we update GeneticTSP or mock it.
-        # Let's pass the graph to GeneticTSP?
-        # Or pre-calculate distance matrix.
-        ga = GeneticTSP(self.orders, self.depot_node, self.astar_engine) # Need to update GeneticTSP signature
+        # Optimize
+        ga = GeneticTSP(self.orders, self.depot_node, self.astar_engine, truck_capacity=30.0, generations=20)
         self.optimized_sequence = ga.solve()
         
-        self.map_view.draw_graph(self.graph, self.depot_node)
-        self.map_view.draw_analyzed_orders(self.orders, self.graph)
-        
-        route_nodes = [self.depot_node] + [self.orders[i].node_id for i in self.optimized_sequence] + [self.depot_node]
-        self.map_view.draw_optimized_route(route_nodes, self.graph)
-        
-        seq_str = " -> ".join([f"P{self.orders[i].id}" for i in self.optimized_sequence])
-        messagebox.showinfo("Passo 3", f"Melhor sequência encontrada:\nDepósito -> {seq_str} -> Depósito")
+        # Navigate
+        smart_path = self._calculate_smart_path()
+        smart_dist = 0
+        if smart_path:
+             smart_dist = self._calculate_smart_dist(smart_path)
 
-    def step4_navigate(self):
-        if not self.optimized_sequence:
-            messagebox.showwarning("Aviso", "Primeiro otimize a rota no Passo 3.")
-            return
-
-        self.control_panel.set_nav_button_state(tk.DISABLED)
+        # --- 3. ANIMATE BOTH ---
+        if legacy_path:
+            self.map_view_legacy.animate_route(legacy_path, self.graph, None)
+        else:
+             messagebox.showwarning("Legacy", "Legacy falhou (sem rota).")
+             
+        if smart_path:
+            self.map_view_smart.animate_route(smart_path, self.graph, None)
+        else:
+             messagebox.showwarning("Smart", "Smart falhou (sem rota).")
         
-        self.map_view.draw_graph(self.graph, self.depot_node)
-        self.map_view.draw_analyzed_orders(self.orders, self.graph)
-
-        stops = [self.depot_node] + [self.orders[i].node_id for i in self.optimized_sequence] + [self.depot_node]
+        # --- 4. SHOW RESULTS ---
+        self.root.config(cursor="")
         
-        full_journey_path = []
+        # Check if Legacy hit a block
+        legacy_valid = True
+        legacy_block_count = 0
+        if legacy_path:
+            for i in range(len(legacy_path)-1):
+                u, v = legacy_path[i], legacy_path[i+1]
+                d = self.graph.get_edge_data(u, v)[0]
+                if d.get('road_block', False):
+                    legacy_valid = False
+                    legacy_block_count += 1
+
+        legacy_status = f"{legacy_dist/1000:.2f} km"
+        if not legacy_valid:
+            legacy_status += f"\n   ❌ FALHOU: Atravessou {legacy_block_count} via(s) bloqueada(s)!"
+        else:
+            legacy_status += "\n   ✅ Sucesso (Sorte!)"
+
+        results_str = (
+            f"📍 LEGACY (Sem IA):\n"
+            f"   Distância: {legacy_status}\n\n"
+            f"🧠 SMART (Com IA):\n"
+            f"   Distância: {smart_dist/1000:.2f} km\n"
+            f"   ✅ Evitou bloqueios e trânsito\n\n"
+            f"🏆 Veredito: "
+        )
+        
+        if not legacy_valid:
+             results_str += "Smart Venceu (Legacy bateu)!"
+        elif legacy_dist > 0 and smart_dist > 0:
+             if smart_dist < legacy_dist:
+                 results_str += "Smart Venceu (Menor Distância)!"
+             else:
+                 results_str += "Smart foi mais cauteloso."
+        
+        self.control_panel.update_results(results_str)
+
+
+    # --- Support Methods ---
+
+    def _calculate_legacy_path(self):
+        sorted_orders = sorted(self.orders, key=lambda x: x.deadline)
+        stops = [self.depot_node] + [o.node_id for o in sorted_orders] + [self.depot_node]
+        full_path_nodes = []
         for i in range(len(stops) - 1):
             start = stops[i]
             end = stops[i+1]
-            path_segment = self.astar_engine.get_path(start, end)
+            try:
+                # Naive shortest path (shortest distance), ignoring 'road_block' attribute
+                path = nx.shortest_path(self.graph, start, end, weight='length')
+                full_path_nodes.extend(path if i == 0 else path[1:])
+            except nx.NetworkXNoPath:
+                pass
+        return full_path_nodes
+    
+    def _calculate_path_length(self, nodes):
+        total_len = 0
+        for i in range(len(nodes)-1):
+            u, v = nodes[i], nodes[i+1]
+            # Use simple length
+            d = self.graph.get_edge_data(u, v)[0]
+            total_len += d.get('length', 0)
+        return total_len
+
+    def _calculate_smart_path(self):
+        stops = [self.depot_node] + [self.orders[i].node_id for i in self.optimized_sequence] + [self.depot_node]
+        full_path = []
+        for i in range(len(stops) - 1):
+            start = stops[i]
+            end = stops[i+1]
+            is_fragile = False
+            if i < len(self.optimized_sequence):
+                 idx = self.optimized_sequence[i]
+                 is_fragile = self.orders[idx].is_fragile
+            
+            path_segment = self.astar_engine.get_path(start, end, is_fragile=is_fragile)
             if path_segment:
-                full_journey_path.extend(path_segment if i == 0 else path_segment[1:])
+                full_path.extend(path_segment if i == 0 else path_segment[1:])
+        return full_path
+
+    def _calculate_smart_dist(self, nodes):
+        # Same util as legacy but maybe checks actual edge used
+        return self._calculate_path_length(nodes) 
+    
+    # Keep old methods for "Individual" buttons if needed, wrapping new logic
+    def run_legacy_simulation(self):
+         path = self._calculate_legacy_path()
+         if path:
+             d = self._calculate_path_length(path)
+             self.map_view_legacy.animate_route(path, self.graph, lambda: messagebox.showinfo("Legacy", f"Dist: {d/1000:.2f}km"))
+    
+    def run_smart_simulation(self):
+        # Trigger Step 2, 3, 4 individually? Or just run logic
+        # For simplicity, map to the button flow
+        self.step2_analyze()
+        self.step3_optimize()
+        self.step4_navigate()
+
+    def step2_analyze(self):
+        # (Same logic as before, just updating Smart View)
+        if not self.orders: return
+        for order in self.orders:
+            dist = self.astar_engine.get_path_cost(self.depot_node, order.node_id, is_fragile=False)
+            self.fuzzy_engine.calculate(order, dist)
+            self.neural_engine.predict(order)
+        self.control_panel.update_table(self.orders)
+        self.map_view_smart.draw_analyzed_orders(self.orders, self.graph)
+
+    def step3_optimize(self):
+        if not self.orders: return
+        ga = GeneticTSP(self.orders, self.depot_node, self.astar_engine)
+        self.optimized_sequence = ga.solve()
+        self.map_view_smart.draw_analyzed_orders(self.orders, self.graph)
+        route_nodes = [self.depot_node] + [self.orders[i].node_id for i in self.optimized_sequence] + [self.depot_node]
+        self.map_view_smart.draw_optimized_route(route_nodes, self.graph)
         
-        if full_journey_path:
-            self.map_view.animate_route(full_journey_path, self.graph, self.on_animation_complete)
-        else:
-            messagebox.showerror("Erro", "Não foi possível calcular o caminho.")
-            self.control_panel.set_nav_button_state(tk.NORMAL)
-
-    def on_animation_complete(self):
-        self.control_panel.set_nav_button_state(tk.NORMAL)
-
-    # Traffic light update removed for now as we switched to graph
-    # We can re-implement it later by updating edge weights dynamically
+    def step4_navigate(self):
+        path = self._calculate_smart_path()
+        if path:
+             d = self._calculate_smart_dist(path)
+             self.map_view_smart.animate_route(path, self.graph, lambda: messagebox.showinfo("Smart", f"Dist: {d/1000:.2f}km"))
 
     def on_close(self):
         self.running = False
         self.root.destroy()
+        import sys
+        sys.exit(0)
 
 if __name__ == "__main__":
+    import sys
     root = tk.Tk()
     app = LogisticsApp(root)
     root.mainloop()

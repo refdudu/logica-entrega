@@ -1,0 +1,10 @@
+osmnx
+networkx
+scikit-fuzzy
+scikit-learn
+matplotlib
+pandas
+folium
+requests
+geopy
+deap
