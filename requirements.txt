@@ -1,8 +1,10 @@
+matplotlib
 osmnx
 networkx
+numpy
 scikit-fuzzy
 scikit-learn
-matplotlib
+networkx
 pandas
 folium
 requests
