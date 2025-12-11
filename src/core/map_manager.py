@@ -69,7 +69,7 @@ class MapManager:
             
             # ✅ CHANGED: 0.1% chance (was 0.5%)
             # In a 1km radius map with ~800 edges, this creates 0-2 blocks
-            if random.random() < 0.001:  # 0.1% chance of road block
+            if random.random() < 0.01:  # 0.1% chance of road block
                 data['road_block'] = True
                 obstacle_count['road_blocks'] += 1
             elif 'road_block' not in data:

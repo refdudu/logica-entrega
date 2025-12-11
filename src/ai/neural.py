@@ -1,32 +1,35 @@
 """
 Módulo de Predição de Tempo de Entrega usando Rede Neural Artificial.
 
-Implementa MLPRegressor (Multi-Layer Perceptron) para estimar o tempo
+Implementa rede neural com TensorFlow para estimar o tempo
 real de entrega baseado em características do pedido e condições da rota.
 
 Dataset de Treino:
-- 100 exemplos sintéticos
-- Features: distância, peso, prazo, tráfego
+- 1000 exemplos sintéticos realistas
+- Features: hora do dia, dia da semana, distância, peso, fragilidade, tráfego
 - Target: tempo de entrega (minutos)
 
 Arquitetura:
-- Camada de entrada: 4 neurônios (features)
-- Camada oculta 1: 10 neurônios (ReLU)
-- Camada oculta 2: 5 neurônios (ReLU)
-- Camada de saída: 1 neurônio (tempo)
+- Camada de entrada: 6 neurônios (features)
+- Camada oculta 1: 32 neurônios (ReLU) + Dropout(0.3)
+- Camada oculta 2: 16 neurônios (ReLU) + Dropout(0.2)
+- Camada oculta 3: 8 neurônios (ReLU)
+- Camada de saída: 1 neurônio (regressão linear)
 """
 
 import numpy as np
-from sklearn.neural_network import MLPRegressor
+import tensorflow as tf
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from datetime import datetime
 import random
 
 
 class NeuralPredictor:
-    """Preditor de tempo de entrega usando Rede Neural Artificial (RNA).
+    """Preditor de tempo de entrega usando Rede Neural Artificial (RNA) com TensorFlow.
     
     Treina com dataset sintético baseado em simulações realistas de entregas
-    considerando distância, peso da carga, prazo e condições de tráfego.
+    considerando hora do dia, dia da semana, distância, peso, fragilidade e tráfego.
     """
     
     def __init__(self, seed: int = 42) -> None:
@@ -36,111 +39,153 @@ class NeuralPredictor:
             seed: Semente para reprodutibilidade
         """
         self.seed = seed
-        self.scaler = StandardScaler()
-        self.model = MLPRegressor(
-            hidden_layer_sizes=(10, 5),
-            activation='relu',
-            solver='adam',
-            max_iter=2000,
-            random_state=seed,
-            early_stopping=True,
-            validation_fraction=0.1
-        )
+        random.seed(seed)
+        np.random.seed(seed)
+        tf.random.set_seed(seed)
+        
+        self.scaler_X = StandardScaler()
+        self.scaler_y = StandardScaler()
+        self.model = None
         self._train()
     
-    def _generate_training_data(self) -> tuple:
-        """Gera dataset sintético para treinamento.
+    def _generate_training_data(self, n_samples: int = 1000) -> tuple:
+        """Gera dataset sintético realista para treinamento.
+        
+        Features:
+        - hora_dia: 0-23
+        - dia_semana: 0-6 (0=segunda, 6=domingo)
+        - distancia_km: 0.5-25.0
+        - peso_kg: 1-30
+        - eh_fragil: 0 ou 1
+        - trafego: 0-1 (0=livre, 1=congestionado)
         
         Returns:
             Tuple (X, y) com features e targets
         """
-        random.seed(self.seed)
-        np.random.seed(self.seed)
-        
         X = []
         y = []
         
-        for _ in range(100):
+        for _ in range(n_samples):
             # Features realistas
-            distance = random.uniform(1000, 30000)  # 1-30km em metros
-            weight = random.uniform(1, 30)          # 1-30kg
-            deadline = random.uniform(10, 120)      # 10-120min
-            traffic = random.uniform(0.0, 1.0)      # 0-100%
+            hora = random.randint(0, 23)
+            dia_semana = random.randint(0, 6)
+            distancia = random.uniform(0.5, 25.0)
+            peso = random.uniform(1, 30)
+            fragil = random.choice([0, 1])
+            trafego = random.uniform(0, 1)
             
-            # Cálculo do tempo de entrega (target)
-            # Base: velocidade média de 30km/h = 500m/min
-            base_time = distance / 500
+            # Tempo calculado com lógica realista
+            tempo_base = distancia * 2.5  # ~2.5 min/km em cidade
             
-            # Penalidade por peso (cargas pesadas = mais tempo de carga/descarga)
-            weight_penalty = weight * 0.1
+            # Ajustes realistas
+            if 7 <= hora <= 9 or 17 <= hora <= 19:  # Horário de pico
+                tempo_base *= 1.5
+            if dia_semana >= 5:  # Final de semana
+                tempo_base *= 0.8
+            if fragil:  # Carga frágil = mais cuidado
+                tempo_base *= 1.2
             
-            # Penalidade por tráfego (até 50% mais lento)
-            traffic_penalty = traffic * base_time * 0.5
+            tempo_base += trafego * 15  # Tráfego adiciona até 15min
+            tempo_base += random.gauss(0, 2)  # Ruído realista
             
-            # Tempo total com pequena variação aleatória
-            delivery_time = base_time + weight_penalty + traffic_penalty
-            delivery_time += random.uniform(-2, 2)  # Variação de ±2min
-            delivery_time = max(5, delivery_time)   # Mínimo 5min
-            
-            X.append([distance, weight, deadline, traffic])
-            y.append(delivery_time)
+            X.append([hora, dia_semana, distancia, peso, fragil, trafego])
+            y.append(max(5, tempo_base))  # Mínimo 5 min
         
         return np.array(X), np.array(y)
     
+    def _build_model(self) -> tf.keras.Model:
+        """Constrói e compila a RNA com TensorFlow.
+        
+        Returns:
+            Modelo Keras compilado
+        """
+        model = tf.keras.Sequential([
+            tf.keras.layers.Dense(32, activation='relu', input_shape=(6,)),
+            tf.keras.layers.Dropout(0.3),
+            tf.keras.layers.Dense(16, activation='relu'),
+            tf.keras.layers.Dropout(0.2),
+            tf.keras.layers.Dense(8, activation='relu'),
+            tf.keras.layers.Dense(1, activation='linear')  # Regressão
+        ])
+        
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+            loss='mse',
+            metrics=['mae']
+        )
+        
+        return model
+    
     def _train(self) -> None:
-        """Treina o modelo com dados sintéticos."""
-        X, y = self._generate_training_data()
+        """Treina o modelo com dados sintéticos usando TensorFlow."""
+        X, y = self._generate_training_data(1000)
         
-        # Normaliza features
-        X_scaled = self.scaler.fit_transform(X)
+        # Split train/validation
+        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=self.seed)
         
-        # Treina modelo
-        self.model.fit(X_scaled, y)
+        # Normalização
+        X_train = self.scaler_X.fit_transform(X_train)
+        X_val = self.scaler_X.transform(X_val)
+        y_train = self.scaler_y.fit_transform(y_train.reshape(-1, 1)).ravel()
+        y_val = self.scaler_y.transform(y_val.reshape(-1, 1)).ravel()
         
-        # Calcula RMSE de treino
-        predictions = self.model.predict(X_scaled)
-        mse = np.mean((predictions - y) ** 2)
-        rmse = np.sqrt(mse)
+        # Constrói e treina modelo
+        self.model = self._build_model()
         
-        print(f"[NeuralPredictor] Treinamento concluído. RMSE: {rmse:.2f} min")
+        # Treinamento silencioso
+        history = self.model.fit(
+            X_train, y_train,
+            validation_data=(X_val, y_val),
+            epochs=50,
+            batch_size=32,
+            verbose=0
+        )
+        
+        # Calcula métricas finais
+        final_loss = history.history['loss'][-1]
+        final_mae = history.history['mae'][-1]
+        
+        print(f"[NeuralPredictor] Treinamento concluído. Loss: {final_loss:.4f}, MAE: {final_mae:.2f} min")
     
     def predict(self, order, distance: float) -> float:
-        """Prediz tempo de entrega para um pedido.
+        """Prediz tempo de entrega para um pedido usando RNA treinada.
         
         Args:
-            order: Objeto Order com atributos weight, deadline
+            order: Objeto Order com atributos weight, is_fragile
             distance: Distância em metros até o destino
             
         Returns:
             Tempo estimado de entrega em minutos
         """
-        # Gera tráfego simulado (poderia vir do mapa real)
-        traffic = random.uniform(0.0, 1.0)
+        # Extrai features do contexto atual
+        hora = datetime.now().hour
+        dia = datetime.now().weekday()
+        distancia_km = distance / 1000.0
+        peso = order.weight
+        fragil = 1 if order.is_fragile else 0
+        trafego = random.uniform(0.3, 0.8)  # Simula API de tráfego
         
         # Monta vetor de features
-        features = np.array([[
-            distance,
-            order.weight,
-            order.deadline,
-            traffic
-        ]])
+        features = np.array([[hora, dia, distancia_km, peso, fragil, trafego]])
         
         # Normaliza e prediz
-        features_scaled = self.scaler.transform(features)
-        predicted_time = self.model.predict(features_scaled)[0]
+        features_scaled = self.scaler_X.transform(features)
+        pred_scaled = self.model.predict(features_scaled, verbose=0)[0][0]
+        pred_time = self.scaler_y.inverse_transform([[pred_scaled]])[0][0]
         
         # Garante valor mínimo
-        predicted_time = max(5.0, predicted_time)
+        predicted_time = max(5.0, pred_time)
         
         # Salva no pedido
         order.delivery_time_estimate = round(predicted_time, 1)
         
         # Define risk_level baseado em deadline
-        if predicted_time > order.deadline:
-            order.risk_level = "HIGH"
-        elif predicted_time > order.deadline * 0.8:
-            order.risk_level = "MEDIUM"
-        else:
-            order.risk_level = "LOW"
+        if hasattr(order, 'deadline'):
+            if predicted_time > order.deadline:
+                order.risk_level = "HIGH"
+            elif predicted_time > order.deadline * 0.8:
+                order.risk_level = "MEDIUM"
+            else:
+                order.risk_level = "LOW"
         
         return predicted_time

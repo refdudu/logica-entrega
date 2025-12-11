@@ -10,3 +10,4 @@ folium
 requests
 geopy
 deap
+tensorflow>=2.13.0
