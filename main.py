@@ -3,6 +3,8 @@ from tkinter import messagebox
 import random
 import networkx as nx
 import time
+import threading
+from typing import List, Optional
 from ui.map_view import MapView
 from ui.control_panel import ControlPanel
 
@@ -100,56 +102,89 @@ class LogisticsApp:
         # messagebox.showinfo("Passo 1", f"{num_orders} pedidos gerados! Observe os pontos no mapa.")
 
     def run_full_comparison(self):
-        # 0. Generate if no orders (or just regenerate)
+        """Run complete comparison between legacy and smart routing in a background thread."""
+        # 0. Generate if no orders
         if not self.orders:
-             self.step1_generate()
+            self.step1_generate()
         
-        if not self.orders: return 
+        if not self.orders:
+            return
 
+        # Run in background thread to avoid blocking UI
+        thread = threading.Thread(target=self._run_comparison_thread, daemon=True)
+        thread.start()
+    
+    def _run_comparison_thread(self) -> None:
+        """Background thread for route optimization (avoids UI freeze)."""
         self.root.config(cursor="wait")
         self.control_panel.update_results("Calculando rotas...")
-        self.root.update()
-
-        # --- 1. RUN LEGACY CALCULATION ---
-        legacy_path = self._calculate_legacy_path()
-        legacy_dist = 0
-        if legacy_path:
-             legacy_dist = self._calculate_path_length(legacy_path)
-             
-        # --- 2. RUN SMART CALCULATION ---
-        # Analyze
-        for order in self.orders:
-            dist = self.astar_engine.get_path_cost(self.depot_node, order.node_id, is_fragile=False)
-            self.fuzzy_engine.calculate(order, dist if dist != float('inf') else 5000)
-            self.neural_engine.predict(order)
         
-        self.control_panel.update_table(self.orders)
-        self.map_view_smart.draw_analyzed_orders(self.orders, self.graph) # Update visuals
+        try:
+            # --- 1. RUN LEGACY CALCULATION ---
+            legacy_path = self._calculate_legacy_path()
+            legacy_dist = 0
+            if legacy_path:
+                legacy_dist = self._calculate_path_length(legacy_path)
+                
+            # --- 2. RUN SMART CALCULATION ---
+            # Analyze orders
+            for order in self.orders:
+                dist = self.astar_engine.get_path_cost(
+                    self.depot_node, order.node_id, is_fragile=False
+                )
+                self.fuzzy_engine.calculate(order, dist if dist != float('inf') else 5000)
+                self.neural_engine.predict(order)
+            
+            # Update UI from thread safely
+            self.root.after(0, lambda: self.control_panel.update_table(self.orders))
+            self.root.after(0, lambda: self.map_view_smart.draw_analyzed_orders(self.orders, self.graph))
 
-        # Optimize
-        ga = GeneticTSP(self.orders, self.depot_node, self.astar_engine, truck_capacity=30.0, generations=20)
-        self.optimized_sequence = ga.solve()
-        
-        # Navigate
-        smart_path = self._calculate_smart_path()
-        smart_dist = 0
-        if smart_path:
-             smart_dist = self._calculate_smart_dist(smart_path)
+            # Optimize with progress callback
+            def update_progress(current_gen: int, total_gens: int) -> None:
+                progress_msg = f"Otimizando rotas... {current_gen}/{total_gens} gerações"
+                self.root.after(0, lambda: self.control_panel.update_results(progress_msg))
+            
+            ga = GeneticTSP(
+                self.orders, 
+                self.depot_node, 
+                self.astar_engine, 
+                truck_capacity=30.0, 
+                generations=20,
+                progress_callback=update_progress
+            )
+            self.optimized_sequence = ga.solve()
+            
+            # Navigate
+            smart_path = self._calculate_smart_path()
+            smart_dist = 0
+            if smart_path:
+                smart_dist = self._calculate_smart_dist(smart_path)
 
-        # --- 3. ANIMATE BOTH ---
+            # --- 3. ANIMATE BOTH (on main thread) ---
+            self.root.after(0, lambda: self._animate_comparison(
+                legacy_path, legacy_dist, smart_path, smart_dist
+            ))
+            
+        except Exception as e:
+            error_msg = f"Erro durante otimização: {str(e)}"
+            self.root.after(0, lambda: messagebox.showerror("Erro", error_msg))
+        finally:
+            self.root.after(0, lambda: self.root.config(cursor=""))
+    
+    def _animate_comparison(self, legacy_path: List[int], legacy_dist: float,
+                           smart_path: List[int], smart_dist: float) -> None:
+        """Animate both routes and display comparison results (must run on main thread)."""
         if legacy_path:
             self.map_view_legacy.animate_route(legacy_path, self.graph, None)
         else:
-             messagebox.showwarning("Legacy", "Legacy falhou (sem rota).")
-             
+            messagebox.showwarning("Legacy", "Legacy falhou (sem rota).")
+            
         if smart_path:
             self.map_view_smart.animate_route(smart_path, self.graph, None)
         else:
-             messagebox.showwarning("Smart", "Smart falhou (sem rota).")
+            messagebox.showwarning("Smart", "Smart falhou (sem rota).")
         
         # --- 4. SHOW RESULTS ---
-        self.root.config(cursor="")
-        
         # Check if Legacy hit a block
         legacy_valid = True
         legacy_block_count = 0
@@ -177,12 +212,12 @@ class LogisticsApp:
         )
         
         if not legacy_valid:
-             results_str += "Smart Venceu (Legacy bateu)!"
+            results_str += "Smart Venceu (Legacy bateu)!"
         elif legacy_dist > 0 and smart_dist > 0:
-             if smart_dist < legacy_dist:
-                 results_str += "Smart Venceu (Menor Distância)!"
-             else:
-                 results_str += "Smart foi mais cauteloso."
+            if smart_dist < legacy_dist:
+                results_str += "Smart Venceu (Menor Distância)!"
+            else:
+                results_str += "Smart foi mais cauteloso."
         
         self.control_panel.update_results(results_str)
 
@@ -258,12 +293,43 @@ class LogisticsApp:
         self.map_view_smart.draw_analyzed_orders(self.orders, self.graph)
 
     def step3_optimize(self):
-        if not self.orders: return
-        ga = GeneticTSP(self.orders, self.depot_node, self.astar_engine)
-        self.optimized_sequence = ga.solve()
+        """Optimize delivery route using Genetic Algorithm (runs in background thread)."""
+        if not self.orders:
+            return
+        
+        thread = threading.Thread(target=self._optimize_thread, daemon=True)
+        thread.start()
+    
+    def _optimize_thread(self) -> None:
+        """Background thread for route optimization."""
+        try:
+            def update_progress(current_gen: int, total_gens: int) -> None:
+                msg = f"Otimizando... {current_gen}/{total_gens} gerações"
+                self.root.after(0, lambda: self.control_panel.update_results(msg))
+            
+            ga = GeneticTSP(
+                self.orders, 
+                self.depot_node, 
+                self.astar_engine,
+                progress_callback=update_progress
+            )
+            self.optimized_sequence = ga.solve()
+            
+            # Update UI on main thread
+            self.root.after(0, self._update_optimized_route)
+            
+        except Exception as e:
+            error_msg = f"Erro na otimização: {str(e)}"
+            self.root.after(0, lambda: messagebox.showerror("Erro", error_msg))
+    
+    def _update_optimized_route(self) -> None:
+        """Update UI with optimized route (must run on main thread)."""
         self.map_view_smart.draw_analyzed_orders(self.orders, self.graph)
-        route_nodes = [self.depot_node] + [self.orders[i].node_id for i in self.optimized_sequence] + [self.depot_node]
+        route_nodes = [self.depot_node] + \
+                     [self.orders[i].node_id for i in self.optimized_sequence] + \
+                     [self.depot_node]
         self.map_view_smart.draw_optimized_route(route_nodes, self.graph)
+        self.control_panel.update_results("Otimização concluída!")
         
     def step4_navigate(self):
         path = self._calculate_smart_path()

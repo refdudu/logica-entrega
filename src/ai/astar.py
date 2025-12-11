@@ -1,20 +1,55 @@
+from typing import List, Tuple
 import networkx as nx
+import math
 
 class AStarNavigator:
-    def __init__(self, graph):
+    """Navigator using A* algorithm with real-world constraints.
+    
+    Implements A* pathfinding considering road blocks, pavement quality,
+    traffic levels, and cargo fragility.
+    """
+    
+    def __init__(self, graph: nx.Graph) -> None:
+        """Initialize the A* navigator.
+        
+        Args:
+            graph: NetworkX graph with nodes containing 'x', 'y' coordinates
+        """
         self.graph = graph
 
-    def _heuristic(self, u, v):
-        # Using Haversine is better if nodes have (x,y) as (lat,lon)
-        # But 'travel_time' is the weight, so heuristic should be time-based.
-        # If we use simple dist, it might over-estimate if speed is high?
-        # For simplicity/safety in generic graphs, 0 is Dijkstra (safe).
-        # Or Euclidean distance if nodes have 'x', 'y' (OSMnx does).
-        return 0
-
-    def get_path(self, start_node, end_node, is_fragile=False):
+    def _heuristic(self, u: int, v: int) -> float:
+        """Calculate Euclidean distance between two nodes.
+        
+        Args:
+            u: Source node ID
+            v: Target node ID
+            
+        Returns:
+            Euclidean distance between nodes (admissible heuristic for A*)
         """
-        Finds the shortest path given constraints.
+        try:
+            # Get node positions (OSMnx uses 'x' and 'y' attributes)
+            pos_u = (self.graph.nodes[u]['x'], self.graph.nodes[u]['y'])
+            pos_v = (self.graph.nodes[v]['x'], self.graph.nodes[v]['y'])
+            
+            # Calculate Euclidean distance
+            dx = pos_u[0] - pos_v[0]
+            dy = pos_u[1] - pos_v[1]
+            return math.sqrt(dx * dx + dy * dy)
+        except (KeyError, TypeError):
+            # Fallback to 0 if coordinates are missing
+            return 0.0
+
+    def get_path(self, start_node: int, end_node: int, is_fragile: bool = False) -> List[int]:
+        """Find the optimal path between two nodes considering constraints.
+        
+        Args:
+            start_node: Starting node ID
+            end_node: Destination node ID  
+            is_fragile: Whether cargo is fragile (avoids bad pavement)
+            
+        Returns:
+            List of node IDs forming the optimal path, or empty list if no path exists
         """
         def weight_function(u, v, d):
             # 1. Road Block Check
@@ -37,48 +72,56 @@ class AStarNavigator:
             return travel_time * pavement_penalty * traffic_factor
 
         try:
-            return nx.astar_path(self.graph, start_node, end_node, 
-                                 heuristic=None, # self._heuristic, 
-                                 weight=weight_function)
+            return nx.astar_path(
+                self.graph, 
+                start_node, 
+                end_node,
+                heuristic=self._heuristic,
+                weight=weight_function
+            )
         except nx.NetworkXNoPath:
             return []
         except Exception as e:
             print(f"Pathfinding error: {e}")
             return []
 
-    def get_path_cost(self, start_node, end_node, is_fragile=False):
-        path = self.get_path(start_node, end_node, is_fragile)
-        if not path:
-            return float('inf')
+    def get_path_cost(self, start_node: int, end_node: int, is_fragile: bool = False) -> float:
+        """Calculate the cost of the optimal path between two nodes.
         
-        # Calculate total cost manually based on path found
-        cost = 0
-        for i in range(len(path) - 1):
-            u, v = path[i], path[i+1]
-            # Get edge data (min weight if multiple edges)
-            # OSMnx graph is MultiDiGraph.
-            edge_data = self.graph.get_edge_data(u, v)
-            if edge_data:
-                # Pick lowest key (usually 0) or iterate to find min weight?
-                # A* automatically picked the best edge if MultiDiGraph was handled correctly.
-                # nx.astar_path works on MultiDiGraph by minimizing weight.
-                # Let's just re-calculate weight for the best edge.
-                # Simplified: just take first edge
-                d = edge_data[0] 
-                
-                # Re-apply weight logic
-                # (Duplication of logic is risky, but necessary if we don't get cost from astar_path directly without wrapper)
-                # Alternatively, use nx.shortest_path_length but strict A* might vary.
-                
-                if d.get('road_block', False):
-                     return float('inf')
-                
-                pavement_penalty = 1.0
-                if d.get('pavement_quality') == 'bad':
-                     if is_fragile: return float('inf')
-                     pavement_penalty = 1.4
-                
-                traffic_factor = 1.0 + d.get('traffic_level', 0.0)
-                cost += d.get('travel_time', 1.0) * pavement_penalty * traffic_factor
-                
-        return cost
+        Args:
+            start_node: Starting node ID
+            end_node: Destination node ID
+            is_fragile: Whether the cargo is fragile (affects route selection)
+            
+        Returns:
+            Total cost of the path, or infinity if no valid path exists
+        """
+        def weight_function(u, v, d):
+            # Same logic as in get_path for consistency
+            if d.get('road_block', False):
+                return float('inf')
+
+            pavement_penalty = 1.0
+            if d.get('pavement_quality') == 'bad':
+                if is_fragile:
+                    return float('inf')
+                pavement_penalty = 1.4
+
+            traffic_factor = 1.0 + d.get('traffic_level', 0.0)
+            travel_time = d.get('travel_time', 1.0)
+            
+            return travel_time * pavement_penalty * traffic_factor
+        
+        try:
+            # Use NetworkX's efficient shortest_path_length
+            return nx.shortest_path_length(
+                self.graph,
+                start_node,
+                end_node,
+                weight=weight_function
+            )
+        except nx.NetworkXNoPath:
+            return float('inf')
+        except Exception as e:
+            print(f"Path cost calculation error: {e}")
+            return float('inf')

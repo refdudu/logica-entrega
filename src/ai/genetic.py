@@ -1,7 +1,27 @@
+from typing import List, Callable, Optional
 import random
 
 class GeneticTSP:
-    def __init__(self, orders, depot_node, astar_engine, truck_capacity=30.0, population_size=50, generations=50):
+    """Genetic Algorithm for solving Capacitated Vehicle Routing Problem (CVRP).
+    
+    Integrates with Fuzzy Logic system to prioritize high-priority orders,
+    reducing total delivery time for urgent packages.
+    """
+    
+    def __init__(self, orders: List, depot_node: int, astar_engine, 
+                 truck_capacity: float = 30.0, population_size: int = 50, 
+                 generations: int = 50, progress_callback: Optional[Callable[[int, int], None]] = None) -> None:
+        """Initialize the Genetic Algorithm solver.
+        
+        Args:
+            orders: List of Order objects to deliver
+            depot_node: ID of the depot node
+            astar_engine: AStarNavigator instance for pathfinding
+            truck_capacity: Maximum truck capacity in kg
+            population_size: Number of individuals in each generation
+            generations: Number of generations to evolve
+            progress_callback: Optional callback function(current_gen, total_gens)
+        """
         self.orders = orders
         self.depot_node = depot_node
         self.astar_engine = astar_engine
@@ -9,51 +29,78 @@ class GeneticTSP:
         self.population_size = population_size
         self.generations = generations
         self.population = []
+        self.progress_callback = progress_callback
 
-    def _calculate_fitness(self, individual):
+    def _calculate_fitness(self, individual: List[int]) -> float:
+        """Calculate fitness score integrating travel cost and fuzzy priority.
+        
+        The fitness function penalizes routes that deliver high-priority orders late.
+        This integrates Fuzzy Logic output (order.fuzzy_priority) with the Genetic Algorithm,
+        creating a truly intelligent system that considers both route efficiency and urgency.
+        
+        Args:
+            individual: Sequence of order indices representing a route
+            
+        Returns:
+            Fitness score (higher is better)
         """
-        Calculates fitness based on CVRP (Capacitated Vehicle Routing Problem).
-        If capacity is exceeded, truck must return to depot.
-        """
-        total_cost = 0.0
+        total_score = 0.0
         current_node = self.depot_node
         current_load = 0.0
+        current_time = 0.0  # Accumulated time for priority penalty calculation
         
         # Iterate through the sequence of orders
         for order_index in individual:
             order = self.orders[order_index]
             
-            # Check capacity
+            # Check capacity constraint
             if current_load + order.weight > self.truck_capacity:
-                # Must return to depot first
-                cost_to_depot = self.astar_engine.get_path_cost(current_node, self.depot_node, is_fragile=False) # Empty truck is not fragile?
-                total_cost += cost_to_depot
+                # Return to depot to unload
+                cost_to_depot = self.astar_engine.get_path_cost(
+                    current_node, self.depot_node, is_fragile=False
+                )
+                total_score += cost_to_depot
+                current_time += cost_to_depot
                 
                 current_node = self.depot_node
                 current_load = 0.0
             
-            # Go to order location
-            # Note: Truck fragility status depends on what it is carrying. 
-            # If it carries fragile item, it is fragile.
-            # Here implementation is simplified: we assume if we are carrying fragile, it's fragile.
-            # But we are just adding one item.
+            # Travel to order location
+            is_fragile_trip = order.is_fragile
+            travel_cost = self.astar_engine.get_path_cost(
+                current_node, order.node_id, is_fragile=is_fragile_trip
+            )
             
-            is_fragile_trip = order.is_fragile 
-            # Wait, if we already have fragile items?
-            # Simplified: considers current order fragility for this leg.
+            # Update cumulative metrics
+            total_score += travel_cost
+            current_time += travel_cost
             
-            cost_to_order = self.astar_engine.get_path_cost(current_node, order.node_id, is_fragile=is_fragile_trip)
-            total_cost += cost_to_order
+            # ** FUZZY INTEGRATION: Priority-based penalty **
+            # High-priority orders (fuzzy_priority near 10) get heavy penalties if delivered late
+            # This encourages the GA to place urgent orders early in the route
+            priority_weight = getattr(order, 'fuzzy_priority', 5.0)
+            time_penalty = current_time * (priority_weight / 5.0)
+            total_score += time_penalty
             
+            # Update state
             current_node = order.node_id
             current_load += order.weight
             
         # Return to depot at end
-        total_cost += self.astar_engine.get_path_cost(current_node, self.depot_node, is_fragile=False)
+        final_cost = self.astar_engine.get_path_cost(
+            current_node, self.depot_node, is_fragile=False
+        )
+        total_score += final_cost
         
-        return 1.0 / (total_cost + 1e-6)
+        # Convert to fitness (minimize total_score)
+        return 1.0 / (total_score + 1e-6)
 
-    def solve(self):
+    def solve(self) -> List[int]:
+        """Execute the genetic algorithm to find optimal route.
+        
+        Returns:
+            List of order indices representing the optimized delivery sequence
+        """
         if not self.orders:
             return []
             
@@ -63,7 +110,7 @@ class GeneticTSP:
         best_route = None
         max_fitness = -1.0
 
-        for _ in range(self.generations):
+        for generation in range(self.generations):
             fitness_scores = [self._calculate_fitness(ind) for ind in self.population]
             
             # Track best
@@ -71,6 +118,10 @@ class GeneticTSP:
                 if score > max_fitness:
                     max_fitness = score
                     best_route = self.population[i]
+            
+            # Report progress if callback provided
+            if self.progress_callback:
+                self.progress_callback(generation + 1, self.generations)
             
             # Selection & Next Gen ...
             # Simplified standard GA
@@ -91,7 +142,8 @@ class GeneticTSP:
             
         return best_route
 
-    def _tournament(self, pop, scores, k=3):
+    def _tournament(self, pop: List[List[int]], scores: List[float], k: int = 3) -> List[int]:
+        """Tournament selection: pick best from k random individuals."""
         selection_ix = random.sample(range(len(pop)), k)
         best_ix = selection_ix[0]
         for ix in selection_ix[1:]:
@@ -99,8 +151,8 @@ class GeneticTSP:
                 best_ix = ix
         return pop[best_ix]
 
-    def _crossover(self, p1, p2):
-        # Order 1 Crossover
+    def _crossover(self, p1: List[int], p2: List[int]) -> List[int]:
+        """Order 1 Crossover operator for TSP-like problems."""
         start, end = sorted(random.sample(range(len(p1)), 2))
         child = [None] * len(p1)
         child[start:end] = p1[start:end]
@@ -113,7 +165,8 @@ class GeneticTSP:
                 child[ptr] = gene
         return child
 
-    def _mutate(self, indiv):
+    def _mutate(self, indiv: List[int]) -> None:
+        """Swap mutation: randomly swap two positions with 10% probability."""
         if random.random() < 0.1:
             i, j = random.sample(range(len(indiv)), 2)
             indiv[i], indiv[j] = indiv[j], indiv[i]
