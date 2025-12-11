@@ -56,22 +56,25 @@ class AStarNavigator:
             # Base cost from edge length (meters)
             base_cost = d.get('length', 100)
             
-            # 1. Road Block: 15x penalty (increased from 10x)
-            #    Ensures A* strongly avoids blocked roads
+            # 1. Road Block: 15x penalty
             road_block_factor = 15.0 if d.get('road_block', False) else 1.0
 
-            # 2. Pavement Quality & Fragility - CRITICAL CHANGE
+            # 2. Pavement Quality & Fragility
             pavement_penalty = 1.0
             if d.get('pavement_quality') == 'bad':
                 if is_fragile:
-                    # ✅ CHANGED: 20x penalty (was 5x)
-                    # This FORCES A* to take detours to protect fragile cargo
-                    # Smart will ALWAYS achieve 95-100% integrity
-                    pavement_penalty = 20.0
+                    # ✅ AJUSTAR: 40x (meio termo entre 35x e 50x)
+                    # 35x = muito pouco (perde integridade)
+                    # 50x = muito (rotas de 4 horas)
+                    # 40x = equilíbrio ideal
+                    pavement_penalty = 40.0
+                    # Extra penalty for short routes (each meter impacts more)
+                    if base_cost < 200:
+                        pavement_penalty *= 2.0
                 else:
-                    pavement_penalty = 1.4  # Non-fragile: just 40% slower
+                    pavement_penalty = 1.4
 
-            # 3. Traffic slowdown (unchanged)
+            # 3. Traffic slowdown
             traffic_factor = 1.0 + d.get('traffic_level', 0.0)
             
             return base_cost * road_block_factor * pavement_penalty * traffic_factor
@@ -103,25 +106,20 @@ class AStarNavigator:
         """
         def weight_function(u, v, d):
             """A* weight function with EXTREME penalties for fragile cargo protection."""
-            # Base cost from edge length (meters)
             base_cost = d.get('length', 100)
             
-            # 1. Road Block: 15x penalty (increased from 10x)
-            #    Ensures A* strongly avoids blocked roads
             road_block_factor = 15.0 if d.get('road_block', False) else 1.0
 
-            # 2. Pavement Quality & Fragility - CRITICAL CHANGE
             pavement_penalty = 1.0
             if d.get('pavement_quality') == 'bad':
                 if is_fragile:
-                    # ✅ CHANGED: 20x penalty (was 5x)
-                    # This FORCES A* to take detours to protect fragile cargo
-                    # Smart will ALWAYS achieve 95-100% integrity
-                    pavement_penalty = 20.0
+                    # ✅ AJUSTAR: 40x (equilíbrio ideal)
+                    pavement_penalty = 40.0
+                    if base_cost < 200:
+                        pavement_penalty *= 2.0
                 else:
-                    pavement_penalty = 1.4  # Non-fragile: just 40% slower
+                    pavement_penalty = 1.4
 
-            # 3. Traffic slowdown (unchanged)
             traffic_factor = 1.0 + d.get('traffic_level', 0.0)
             
             return base_cost * road_block_factor * pavement_penalty * traffic_factor

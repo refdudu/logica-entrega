@@ -305,7 +305,10 @@ class Simulator:
             # ** FEATURE 1: Cargo Integrity Damage **
             if pavement_quality == 'bad':
                 # Apply damage to fragile items in cargo
-                damage_per_100m = 1.5  # 1.5% damage per 100m on bad roads (more realistic)
+                # ✅ REDUZIR: 0.5% por 100m (era 0.8% ou 1.5%)
+                # Com penalização 40x, Smart ainda pode passar por 200-300m ruins
+                # Precisamos que isso cause <5% de dano
+                damage_per_100m = 0.5  # Mais realista
                 damage_ticks = (length_m / 100.0) * damage_per_100m
                 
                 for order in self.truck.get_fragile_cargo():

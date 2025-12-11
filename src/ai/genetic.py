@@ -87,6 +87,14 @@ class GeneticTSP:
                 position_factor = position / max(len(individual) - 1, 1)
                 priority_penalty += position_factor * (fuzzy_priority - 5.0) * 50
             
+            # ✅ ADICIONAR: Penalização por ordem ruim de frágeis
+            # Frágeis devem ser entregues na primeira metade da rota
+            if order.is_fragile:
+                # Se frágil vem depois da metade da rota, penaliza fortemente
+                if position > len(individual) / 2:
+                    fragile_late_penalty = 500 * (position / len(individual))
+                    priority_penalty += fragile_late_penalty
+            
             # 4. Update truck state
             current_node = order.node_id
             current_load += order.weight

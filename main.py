@@ -198,10 +198,11 @@ class LogisticsApp:
                     """Legacy routing: avoids major obstacles but no AI optimization."""
                     base = d.get('length', 100)
 
-                    # Road blocks: Heavily penalized (8x cost) but still navigable
-                    # This prevents Legacy from getting stuck for 120+ minutes
+                    # Road blocks: Heavily penalized (15x cost) but still navigable
+                    # ✅ AUMENTAR: 15x (era 8x)
+                    # Legacy DEVE evitar bloqueios para comparação justa
                     if d.get('road_block', False):
-                        return base * 8.0
+                        return base * 15.0
 
                     # Bad pavement: Small penalty (Legacy doesn't differentiate fragile cargo)
                     if d.get('pavement_quality') == 'bad':
