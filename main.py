@@ -184,18 +184,40 @@ class LogisticsApp:
     # --- Support Methods ---
 
     def _calculate_legacy_path(self):
+        """Calculate legacy path using simple Dijkstra (no heuristic, just avoids blocks)."""
         sorted_orders = sorted(self.orders, key=lambda x: x.deadline)
         stops = [self.depot_node] + [o.node_id for o in sorted_orders] + [self.depot_node]
         full_path_nodes = []
+
         for i in range(len(stops) - 1):
             start = stops[i]
             end = stops[i+1]
             try:
-                # Naive shortest path (shortest distance), ignoring 'road_block' attribute
-                path = nx.shortest_path(self.graph, start, end, weight='length')
+                # Define weight function that penalizes (but doesn't block) obstacles
+                def legacy_weight(u, v, d):
+                    """Legacy routing: avoids major obstacles but no AI optimization."""
+                    base = d.get('length', 100)
+
+                    # Road blocks: Heavily penalized (8x cost) but still navigable
+                    # This prevents Legacy from getting stuck for 120+ minutes
+                    if d.get('road_block', False):
+                        return base * 8.0
+
+                    # Bad pavement: Small penalty (Legacy doesn't differentiate fragile cargo)
+                    if d.get('pavement_quality') == 'bad':
+                        return base * 1.3  # 30% more expensive
+
+                    return base
+
+                # Use Dijkstra (shortest_path) with weight function
+                # No heuristic = still "dumb" compared to A*
+                path = nx.shortest_path(self.graph, start, end, weight=legacy_weight)
                 full_path_nodes.extend(path if i == 0 else path[1:])
+
             except nx.NetworkXNoPath:
+                print(f"  [Legacy] No path found from {start} to {end}")
                 pass
+
         return full_path_nodes
     
     def _calculate_path_length(self, nodes):
@@ -246,8 +268,9 @@ class LogisticsApp:
         if not self.orders: return
         for order in self.orders:
             dist = self.astar_engine.get_path_cost(self.depot_node, order.node_id, is_fragile=False)
-            self.fuzzy_engine.calculate(order, dist)
-            self.neural_engine.predict(order)
+            self.fuzzy_engine.calculate(order, dist if dist != float('inf') else 5000)
+            # Use fallback distance of 5000m if path is infinite/unreachable
+            self.neural_engine.predict(order, dist if dist != float('inf') else 5000)
         self.control_panel.update_table(self.orders)
         self.map_view_smart.draw_analyzed_orders(self.orders, self.graph)
 

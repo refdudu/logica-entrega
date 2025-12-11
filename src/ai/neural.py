@@ -60,7 +60,7 @@ class NeuralPredictor:
         X = []
         y = []
         
-        for _ in range(100):
+        for _ in range(1000):
             # Features realistas
             distance = random.uniform(1000, 30000)  # 1-30km em metros
             weight = random.uniform(1, 30)          # 1-30kg

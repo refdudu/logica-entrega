@@ -1,30 +1,120 @@
 ============================================================
 RELATÓRIO DE PERFORMANCE: LEGACY vs SMART
-Data: 2025-12-10 23:50:26
+Data: 2025-12-11 00:15:22
 ============================================================
 
 
+--- CENÁRIO: 2 PEDIDOS ---
+LEGACY -> Integridade: 98.4% | Tempo: 124min | Distância: 1.73km
+SMART  -> Integridade: 93.5% | Tempo: 6min | Distância: 2.48km
+🏆 Vencedor: Legacy
+-----------------------------------
+
+--- CENÁRIO: 3 PEDIDOS ---
+LEGACY -> Integridade: 94.1% | Tempo: 132min | Distância: 5.11km
+SMART  -> Integridade: 96.9% | Tempo: 13min | Distância: 5.39km
+🏆 Vencedor: Smart
+-----------------------------------
+
+--- CENÁRIO: 4 PEDIDOS ---
+LEGACY -> Integridade: 91.9% | Tempo: 138min | Distância: 7.51km
+SMART  -> Integridade: 95.2% | Tempo: 14min | Distância: 5.61km
+🏆 Vencedor: Smart
+-----------------------------------
+
 --- CENÁRIO: 5 PEDIDOS ---
-LEGACY -> Integridade: 64.6% | Tempo: 142min | Distância: 7.51km
-SMART  -> Integridade: 74.8% | Tempo: 135min | Distância: 5.78km
+LEGACY -> Integridade: 90.2% | Tempo: 138min | Distância: 7.51km
+SMART  -> Integridade: 94.2% | Tempo: 14min | Distância: 5.78km
+🏆 Vencedor: Smart
+-----------------------------------
+
+--- CENÁRIO: 6 PEDIDOS ---
+LEGACY -> Integridade: 86.3% | Tempo: 142min | Distância: 9.06km
+SMART  -> Integridade: 92.6% | Tempo: 15min | Distância: 6.29km
+🏆 Vencedor: Smart
+-----------------------------------
+
+--- CENÁRIO: 7 PEDIDOS ---
+LEGACY -> Integridade: 88.6% | Tempo: 147min | Distância: 10.83km
+SMART  -> Integridade: 94.1% | Tempo: 20min | Distância: 8.13km
+🏆 Vencedor: Smart
+-----------------------------------
+
+--- CENÁRIO: 8 PEDIDOS ---
+LEGACY -> Integridade: 84.3% | Tempo: 159min | Distância: 15.71km
+SMART  -> Integridade: 88.4% | Tempo: 27min | Distância: 11.02km
+🏆 Vencedor: Smart
+-----------------------------------
+
+--- CENÁRIO: 9 PEDIDOS ---
+LEGACY -> Integridade: 81.5% | Tempo: 163min | Distância: 17.59km
+SMART  -> Integridade: 91.5% | Tempo: 30min | Distância: 12.52km
 🏆 Vencedor: Smart
 -----------------------------------
 
 --- CENÁRIO: 10 PEDIDOS ---
-LEGACY -> Integridade: 63.6% | Tempo: 48min | Distância: 17.54km
-SMART  -> Integridade: 53.2% | Tempo: 154min | Distância: 12.77km
+LEGACY -> Integridade: 84.5% | Tempo: 283min | Distância: 17.54km
+SMART  -> Integridade: 91.2% | Tempo: 33min | Distância: 13.49km
+🏆 Vencedor: Smart
+-----------------------------------
+
+--- CENÁRIO: 11 PEDIDOS ---
+LEGACY -> Integridade: 83.7% | Tempo: 285min | Distância: 18.15km
+SMART  -> Integridade: 90.5% | Tempo: 34min | Distância: 14.02km
+🏆 Vencedor: Smart
+-----------------------------------
+
+--- CENÁRIO: 12 PEDIDOS ---
+LEGACY -> Integridade: 88.5% | Tempo: 165min | Distância: 18.43km
+SMART  -> Integridade: 87.5% | Tempo: 155min | Distância: 14.36km
 🏆 Vencedor: Legacy
 -----------------------------------
 
+--- CENÁRIO: 13 PEDIDOS ---
+LEGACY -> Integridade: 83.5% | Tempo: 175min | Distância: 22.48km
+SMART  -> Integridade: 92.0% | Tempo: 37min | Distância: 14.97km
+🏆 Vencedor: Smart
+-----------------------------------
+
+--- CENÁRIO: 14 PEDIDOS ---
+LEGACY -> Integridade: 81.3% | Tempo: 177min | Distância: 23.18km
+SMART  -> Integridade: 91.7% | Tempo: 38min | Distância: 15.27km
+🏆 Vencedor: Smart
+-----------------------------------
+
 --- CENÁRIO: 15 PEDIDOS ---
-LEGACY -> Integridade: 49.2% | Tempo: 191min | Distância: 26.01km
-SMART  -> Integridade: 69.4% | Tempo: 285min | Distância: 17.06km
+LEGACY -> Integridade: 82.1% | Tempo: 183min | Distância: 26.01km
+SMART  -> Integridade: 91.4% | Tempo: 40min | Distância: 16.97km
+🏆 Vencedor: Smart
+-----------------------------------
+
+--- CENÁRIO: 16 PEDIDOS ---
+LEGACY -> Integridade: 82.6% | Tempo: 190min | Distância: 28.49km
+SMART  -> Integridade: 88.0% | Tempo: 47min | Distância: 19.27km
+🏆 Vencedor: Smart
+-----------------------------------
+
+--- CENÁRIO: 17 PEDIDOS ---
+LEGACY -> Integridade: 83.6% | Tempo: 196min | Distância: 30.83km
+SMART  -> Integridade: 89.9% | Tempo: 169min | Distância: 20.49km
+🏆 Vencedor: Smart
+-----------------------------------
+
+--- CENÁRIO: 18 PEDIDOS ---
+LEGACY -> Integridade: 84.5% | Tempo: 196min | Distância: 31.12km
+SMART  -> Integridade: 91.4% | Tempo: 41min | Distância: 17.34km
+🏆 Vencedor: Smart
+-----------------------------------
+
+--- CENÁRIO: 19 PEDIDOS ---
+LEGACY -> Integridade: 86.3% | Tempo: 318min | Distância: 31.72km
+SMART  -> Integridade: 89.4% | Tempo: 55min | Distância: 22.68km
 🏆 Vencedor: Smart
 -----------------------------------
 
 --- CENÁRIO: 20 PEDIDOS ---
-LEGACY -> Integridade: 58.0% | Tempo: 455min | Distância: 34.61km
-SMART  -> Integridade: 70.4% | Tempo: 56min | Distância: 20.82km
+LEGACY -> Integridade: 85.9% | Tempo: 204min | Distância: 34.61km
+SMART  -> Integridade: 89.6% | Tempo: 172min | Distância: 21.59km
 🏆 Vencedor: Smart
 -----------------------------------
 
@@ -32,8 +122,8 @@ SMART  -> Integridade: 70.4% | Tempo: 56min | Distância: 20.82km
 ============================================================
 RESUMO GERAL
 ============================================================
-Vitórias Smart:  3
-Vitórias Legacy: 1
-Taxa de sucesso Smart: 75%
+Vitórias Smart:  17
+Vitórias Legacy: 2
+Taxa de sucesso Smart: 89%
 
 ============================================================

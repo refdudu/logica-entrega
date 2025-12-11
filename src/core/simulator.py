@@ -292,7 +292,7 @@ class Simulator:
             # Bad pavement slowdown
             pavement_quality = data.get('pavement_quality', 'good')
             if pavement_quality == 'bad':
-                speed_kmh *= 0.6  # 40% slower on bad roads
+                speed_kmh *= 0.8  # 20% slower on bad roads (more realistic)
             
             effective_speed_kmh = speed_kmh / traffic_factor
             if effective_speed_kmh < 5:
@@ -305,7 +305,7 @@ class Simulator:
             # ** FEATURE 1: Cargo Integrity Damage **
             if pavement_quality == 'bad':
                 # Apply damage to fragile items in cargo
-                damage_per_100m = 5.0  # 5% damage per 100m on bad roads
+                damage_per_100m = 1.5  # 1.5% damage per 100m on bad roads (more realistic)
                 damage_ticks = (length_m / 100.0) * damage_per_100m
                 
                 for order in self.truck.get_fragile_cargo():

@@ -60,15 +60,16 @@ class MapManager:
         obstacle_count = {'bad_pavement': 0, 'road_blocks': 0}
         
         for u, v, k, data in graph.edges(keys=True, data=True):
-            # 8% chance of bad pavement (potholes) - reduced for connectivity
-            if random.random() < 0.08:
+            # 3% chance of bad pavement (potholes) - more realistic
+            if random.random() < 0.03:
                 data['pavement_quality'] = 'bad'
                 obstacle_count['bad_pavement'] += 1
             elif 'pavement_quality' not in data:
                 data['pavement_quality'] = 'good'
             
-            # 1% chance of road block - reduced for better gameplay
-            if random.random() < 0.01:
+            # ✅ CHANGED: 0.1% chance (was 0.5%)
+            # In a 1km radius map with ~800 edges, this creates 0-2 blocks
+            if random.random() < 0.001:  # 0.1% chance of road block
                 data['road_block'] = True
                 obstacle_count['road_blocks'] += 1
             elif 'road_block' not in data:

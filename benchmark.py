@@ -23,7 +23,8 @@ def run_benchmark():
     print("=" * 60)
 
     # Configuration
-    test_cases = [5, 10, 15, 20]  # Number of orders per scenario
+    test_cases =  list(range(2, 21))  # Number of orders per scenario
+   
     map_seed = 123   # Fixed seed for obstacles (fair comparison)
     order_seed = 999  # Fixed seed for orders
 
