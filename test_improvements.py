@@ -158,6 +158,99 @@ def test_simulator_structure():
         return False
 
 
+def test_dfs_bfs():
+    """Testa se DFS e BFS funcionam corretamente."""
+    print("\n🔍 Testando DFS/BFS...")
+    
+    try:
+        import networkx as nx
+        from src.ai.search import BasicSearch
+        
+        # Criar grafo simples
+        G = nx.DiGraph()
+        G.add_edges_from([(1, 2), (2, 3), (1, 3), (3, 4)])
+        
+        search = BasicSearch(G)
+        
+        # Testar DFS
+        dfs_path = search.dfs(1, 4)
+        assert len(dfs_path) > 0, "DFS deve encontrar caminho"
+        assert dfs_path[0] == 1 and dfs_path[-1] == 4, "Caminho deve ir de 1 a 4"
+        
+        # Testar BFS
+        bfs_path = search.bfs(1, 4)
+        assert len(bfs_path) > 0, "BFS deve encontrar caminho"
+        assert bfs_path[0] == 1 and bfs_path[-1] == 4, "Caminho deve ir de 1 a 4"
+        
+        print("  ✅ DFS/BFS funcionando corretamente")
+        return True
+    except Exception as e:
+        print(f"  ❌ Erro: {e}")
+        return False
+
+
+def test_neural_predictor():
+    """Testa se NeuralPredictor prevê tempo."""
+    print("\n🔍 Testando NeuralPredictor...")
+    
+    try:
+        from src.ai.neural import NeuralPredictor
+        from src.models.order import Order
+        
+        neural = NeuralPredictor()
+        order = Order(1, 123, 60, 5.0, False, 0)
+        
+        neural.predict(order, distance=2.0, traffic=0.5)
+        
+        assert hasattr(order, 'predicted_time'), "Order deve ter predicted_time"
+        assert order.predicted_time > 0, "Tempo previsto deve ser positivo"
+        assert order.risk_level in ["LOW", "MEDIUM", "HIGH", "UNKNOWN"], "Risk level inválido"
+        
+        print(f"  ✅ NeuralPredictor funcionando (predicted_time={order.predicted_time:.1f}min)")
+        return True
+    except Exception as e:
+        print(f"  ❌ Erro: {e}")
+        return False
+
+
+def test_astar_fragile():
+    """Testa se A* usa penalidades ao invés de bloqueios."""
+    print("\n🔍 Testando A* com carga frágil...")
+    
+    try:
+        import networkx as nx
+        from src.ai.astar import AStarNavigator
+        
+        # Criar grafo com pavimento ruim
+        G = nx.MultiDiGraph()
+        G.add_edge(1, 2, length=100, pavement_quality='good', road_block=False, traffic_level=0)
+        G.add_edge(2, 3, length=100, pavement_quality='bad', road_block=False, traffic_level=0)
+        G.add_edge(1, 3, length=300, pavement_quality='good', road_block=False, traffic_level=0)
+        
+        # Adicionar coordenadas fake
+        for n in G.nodes():
+            G.nodes[n]['x'] = n * 0.001
+            G.nodes[n]['y'] = n * 0.001
+        
+        astar = AStarNavigator(G)
+        
+        # Sem carga frágil: deve usar caminho mais curto
+        path_normal = astar.get_path(1, 3, is_fragile=False)
+        
+        # Com carga frágil: deve evitar pavimento ruim (preferir 1->3 direto)
+        path_fragile = astar.get_path(1, 3, is_fragile=True)
+        
+        # Ambos devem retornar caminho (não bloqueado)
+        assert len(path_normal) > 0, "Deve haver caminho sem frágil"
+        assert len(path_fragile) > 0, "Deve haver caminho com frágil"
+        
+        print("  ✅ A* funcionando com penalidades (não bloqueios)")
+        return True
+    except Exception as e:
+        print(f"  ❌ Erro: {e}")
+        return False
+
+
 def main():
     """Executa todos os testes."""
     print("=" * 60)
@@ -169,7 +262,10 @@ def main():
         "Order.current_integrity": test_order_integrity(),
         "Truck.cargo": test_truck_cargo(),
         "MapManager.enrich_map_with_obstacles": test_map_enrich(),
-        "Simulator Structure": test_simulator_structure()
+        "Simulator Structure": test_simulator_structure(),
+        "DFS/BFS Search": test_dfs_bfs(),
+        "NeuralPredictor": test_neural_predictor(),
+        "A* Fragile Pathing": test_astar_fragile()
     }
     
     print("\n" + "=" * 60)

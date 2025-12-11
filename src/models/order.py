@@ -13,6 +13,7 @@ class Order:
     # Attributes calculated by AI
     fuzzy_priority: float = 0.0
     risk_level: str = "UNKNOWN"
+    predicted_time: float = 0.0  # Predicted delivery time in minutes
     
     # New: Cargo integrity tracking
     current_integrity: float = 100.0  # Starts at 100%

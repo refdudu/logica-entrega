@@ -52,26 +52,25 @@ class AStarNavigator:
             List of node IDs forming the optimal path, or empty list if no path exists
         """
         def weight_function(u, v, d):
-            # 1. Road Block Check
-            if d.get('road_block', False):
-                return float('inf')
+            # Base cost from edge length (meters)
+            base_cost = d.get('length', 100)
+            
+            # 1. Road Block: 10x penalty (not infinity, always navigable)
+            road_block_factor = 10.0 if d.get('road_block', False) else 1.0
 
             # 2. Pavement Quality & Fragility
             pavement_penalty = 1.0
             if d.get('pavement_quality') == 'bad':
                 if is_fragile:
-                    # Massive penalty but still navigable as last resort
-                    pavement_penalty = 5000.0
+                    # 5x penalty for fragile cargo on bad roads
+                    pavement_penalty = 5.0
                 else:
                     pavement_penalty = 1.4  # 40% slower
 
-            # 3. Traffic
+            # 3. Traffic slowdown
             traffic_factor = 1.0 + d.get('traffic_level', 0.0)
-
-            # Base travel time
-            travel_time = d.get('travel_time', 1.0)
             
-            return travel_time * pavement_penalty * traffic_factor
+            return base_cost * road_block_factor * pavement_penalty * traffic_factor
 
         try:
             return nx.astar_path(
@@ -99,22 +98,25 @@ class AStarNavigator:
             Total cost of the path, or infinity if no valid path exists
         """
         def weight_function(u, v, d):
-            # Same logic as in get_path for consistency
-            if d.get('road_block', False):
-                return float('inf')
+            # Base cost from edge length (meters)
+            base_cost = d.get('length', 100)
+            
+            # 1. Road Block: 10x penalty (not infinity, always navigable)
+            road_block_factor = 10.0 if d.get('road_block', False) else 1.0
 
+            # 2. Pavement Quality & Fragility
             pavement_penalty = 1.0
             if d.get('pavement_quality') == 'bad':
                 if is_fragile:
-                    # Massive penalty but still navigable as last resort
-                    pavement_penalty = 5000.0
+                    # 5x penalty for fragile cargo on bad roads
+                    pavement_penalty = 5.0
                 else:
                     pavement_penalty = 1.4
 
+            # 3. Traffic slowdown
             traffic_factor = 1.0 + d.get('traffic_level', 0.0)
-            travel_time = d.get('travel_time', 1.0)
             
-            return travel_time * pavement_penalty * traffic_factor
+            return base_cost * road_block_factor * pavement_penalty * traffic_factor
         
         try:
             # Use NetworkX's efficient shortest_path_length

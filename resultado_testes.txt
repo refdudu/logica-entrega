@@ -1,30 +1,30 @@
 ============================================================
 RELATÓRIO DE PERFORMANCE: LEGACY vs SMART
-Data: 2025-12-10 23:24:25
+Data: 2025-12-10 23:43:20
 ============================================================
 
 
 --- CENÁRIO: 5 PEDIDOS ---
-LEGACY -> Integridade: 60.3% | Tempo: 139min | Distância: 7.51km
-SMART  -> Integridade: 73.2% | Tempo: 15min | Distância: 5.78km
-🏆 Vencedor: Smart
+LEGACY -> Integridade: 67.2% | Tempo: 140min | Distância: 7.51km
+SMART  -> Integridade: 41.5% | Tempo: 18min | Distância: 6.27km
+🏆 Vencedor: Legacy
 -----------------------------------
 
 --- CENÁRIO: 10 PEDIDOS ---
-LEGACY -> Integridade: 54.2% | Tempo: 48min | Distância: 17.54km
-SMART  -> Integridade: 58.1% | Tempo: 155min | Distância: 12.70km
-🏆 Vencedor: Smart
+LEGACY -> Integridade: 59.6% | Tempo: 47min | Distância: 17.54km
+SMART  -> Integridade: 56.2% | Tempo: 34min | Distância: 12.44km
+🏆 Vencedor: Legacy
 -----------------------------------
 
 --- CENÁRIO: 15 PEDIDOS ---
-LEGACY -> Integridade: 48.3% | Tempo: 430min | Distância: 26.01km
-SMART  -> Integridade: 64.6% | Tempo: 288min | Distância: 18.20km
-🏆 Vencedor: Smart
+LEGACY -> Integridade: 55.5% | Tempo: 309min | Distância: 26.01km
+SMART  -> Integridade: 49.9% | Tempo: 48min | Distância: 17.85km
+🏆 Vencedor: Legacy
 -----------------------------------
 
 --- CENÁRIO: 20 PEDIDOS ---
-LEGACY -> Integridade: 53.3% | Tempo: 576min | Distância: 34.61km
-SMART  -> Integridade: 67.7% | Tempo: 418min | Distância: 21.73km
+LEGACY -> Integridade: 57.1% | Tempo: 573min | Distância: 34.61km
+SMART  -> Integridade: 58.6% | Tempo: 61min | Distância: 22.26km
 🏆 Vencedor: Smart
 -----------------------------------
 
@@ -32,8 +32,8 @@ SMART  -> Integridade: 67.7% | Tempo: 418min | Distância: 21.73km
 ============================================================
 RESUMO GERAL
 ============================================================
-Vitórias Smart:  4
-Vitórias Legacy: 0
-Taxa de sucesso Smart: 100%
+Vitórias Smart:  1
+Vitórias Legacy: 3
+Taxa de sucesso Smart: 25%
 
 ============================================================

@@ -1,97 +1,328 @@
-### 1\. Ajuste no A\* (De "Muro" para "Lama")
+```markdown
+# Checklist de Implementação - Rede Neural (Opção 1)
 
-Em vez de dizer que é _impossível_ (`inf`) passar no buraco (o que quebra a lógica se for o único caminho), vamos dizer que é **extremamente custoso**. Assim, o caminhão só passa lá se for a _única_ opção absoluta.
+## Passo 1: Backup e Preparação
 
-**Arquivo:** `src/ai/astar.py`
-**Alteração:** Troque o `float('inf')` por uma penalidade massiva (ex: 5000x).
-
-```python
-# Na função weight_function ou _calculate_weight
-
-# ... check road_block ...
-
-# Pavement Quality & Fragility
-pavement_penalty = 1.0
-if d.get('pavement_quality') == 'bad':
-    if is_fragile:
-        # ANTES: return float('inf')
-        # DEPOIS: Penalidade gigante, mas navegável se for a única opção
-        pavement_penalty = 5000.0
-    else:
-        pavement_penalty = 1.4
+- [ ] Fazer backup do arquivo atual `src/ai/neural.py` (renomear para `neural_old.py`)
+- [ ] Verificar se `requirements.txt` tem as dependências:
 ```
 
-_Isso garante que o A_ sempre retorne um caminho válido, evitando comportamentos imprevisíveis do simulador.\*
+scikit-learn>=1.0.0
+numpy>=1.20.0
+
+```
+- [ ] Instalar dependências se necessário: `pip install -r requirements.txt`
 
 ---
 
-### 2\. A Correção Crítica no Genético (`genetic.py`)
+## Passo 2: Reescrever `src/ai/neural.py`
 
-Essa é a mudança que vai fazer o Smart vencer de lavada. Vamos ensinar o Genético a entender que **fragilidade acumula**. Se ele pegou um item frágil no começo, o resto da rota inteira precisa ser feita com cuidado (e portanto, custará mais caro).
+### 2.1 Imports e Estrutura da Classe
 
-Isso vai forçar o Genético a organizar as entregas para pegar os itens frágeis **por último** (Last In, First Out logic), minimizando o tempo de exposição ao risco.
+- [ ] Adicionar imports necessários no topo do arquivo:
+```
 
-**Arquivo:** `src/ai/genetic.py`
-**Substitua o método `_calculate_fitness` por este:**
+import numpy as np
+from sklearn.neural_network import MLPRegressor
+from sklearn.preprocessing import StandardScaler
+import random
 
-```python
-    def _calculate_fitness(self, individual: List[int]) -> float:
-        total_cost = 0.0
-        current_node = self.depot_node
-        current_load = 0.0
+```
 
-        # Variável para rastrear se TEMOS algo frágil no caminhão agora
-        has_fragile_cargo = False
+- [ ] Criar docstring da classe explicando o propósito:
+```
 
-        for order_index in individual:
-            order = self.orders[order_index]
+class NeuralPredictor:
+"""Preditor de tempo de entrega usando Rede Neural Artificial (RNA).
 
-            # 1. Capacidade (Lógica existente)
-            if current_load + order.weight > self.truck_capacity:
-                # Volta pro depósito (com o estado atual de fragilidade)
-                cost_to_depot = self.astar_engine.get_path_cost(current_node, self.depot_node, is_fragile=has_fragile_cargo)
-                total_cost += cost_to_depot
-                current_node = self.depot_node
-                current_load = 0.0
-                has_fragile_cargo = False # Descarregou tudo
+      Treina com dataset sintético baseado em simulações realistas de entregas
+      considerando distância, peso da carga, prazo e condições de tráfego.
+      """
 
-            # 2. Custo da viagem até o pedido
-            # O pulo do gato: A viagem é frágil se o pedido NOVO é frágil OU se já temos algo frágil
-            trip_is_fragile = order.is_fragile or has_fragile_cargo
+````
 
-            cost = self.astar_engine.get_path_cost(current_node, order.node_id, is_fragile=trip_is_fragile)
+### 2.2 Método `__init__`
 
-            # Se o custo for muito alto (penalidade do A*), o Genético vai punir essa rota
-            total_cost += cost
+- [ ] Implementar `__init__(self, seed: int = 42)` com:
+- [ ] Salvar `self.seed = seed`
+- [ ] Criar `self.scaler = StandardScaler()`
+- [ ] Criar `self.model = MLPRegressor(...)` com parâmetros:
+  - [ ] `hidden_layer_sizes=(10, 5)`
+  - [ ] `activation='relu'`
+  - [ ] `solver='adam'`
+  - [ ] `max_iter=1000`
+  - [ ] `random_state=seed`
+- [ ] Chamar `self._train()` no final
 
-            # 3. Atualiza estado do caminhão
-            current_node = order.node_id
-            current_load += order.weight
+### 2.3 Método `_generate_training_data`
 
-            # Se pegamos um frágil, o caminhão fica "infectado" com fragilidade até voltar ao depósito
-            if order.is_fragile:
-                has_fragile_cargo = True
+- [ ] Implementar `_generate_training_data(self)` que:
+- [ ] Define `random.seed(self.seed)` e `np.random.seed(self.seed)`
+- [ ] Cria listas vazias `X = []` e `y = []`
+- [ ] Loop de 100 iterações:
+  - [ ] Gera `distance = random.uniform(1000, 30000)` (1-30km)
+  - [ ] Gera `weight = random.uniform(1, 30)` (1-30kg)
+  - [ ] Gera `deadline = random.uniform(10, 120)` (10-120min)
+  - [ ] Gera `traffic = random.uniform(0.0, 1.0)` (0-100%)
+  - [ ] Calcula target:
+    ```
+    base_time = distance / 500  # ~30km/h
+    weight_penalty = weight * 0.1
+    traffic_penalty = traffic * base_time * 0.5
+    delivery_time = base_time + weight_penalty + traffic_penalty
+    ```
+  - [ ] Adiciona `[distance, weight, deadline, traffic]` em `X`
+  - [ ] Adiciona `delivery_time` em `y`
+- [ ] Retorna `np.array(X), np.array(y)`
 
-        # Retorno final ao depósito
-        total_cost += self.astar_engine.get_path_cost(current_node, self.depot_node, is_fragile=has_fragile_cargo)
+### 2.4 Método `_train`
 
-        return 1.0 / (total_cost + 1e-6)
+- [ ] Implementar `_train(self)` que:
+- [ ] Chama `X, y = self._generate_training_data()`
+- [ ] Normaliza: `X_scaled = self.scaler.fit_transform(X)`
+- [ ] Treina: `self.model.fit(X_scaled, y)`
+- [ ] Calcula RMSE:
+  ```
+  predictions = self.model.predict(X_scaled)
+  mse = np.mean((predictions - y) ** 2)
+  rmse = np.sqrt(mse)
+  ```
+- [ ] Imprime: `print(f"[NeuralPredictor] Treinamento concluído. RMSE: {rmse:.2f} min")`
+
+### 2.5 Método `predict`
+
+- [ ] Implementar `predict(self, order, distance: float) -> float` que:
+- [ ] Gera tráfego aleatório: `traffic = random.uniform(0.0, 1.0)`
+- [ ] Monta features:
+  ```
+  features = np.array([[
+      distance,
+      order.weight,
+      order.deadline,
+      traffic
+  ]])
+  ```
+- [ ] Normaliza: `features_scaled = self.scaler.transform(features)`
+- [ ] Prediz: `predicted_time = self.model.predict(features_scaled)[0]`
+- [ ] Salva no pedido: `order.delivery_time_estimate = predicted_time`
+- [ ] Retorna: `return predicted_time`
+
+---
+
+## Passo 3: Integração com o Sistema
+
+### 3.1 Verificar Importação no `main.py`
+
+- [ ] Confirmar que `main.py` tem: `from src.ai.neural import NeuralPredictor`
+- [ ] Confirmar que existe: `self.neural_engine = NeuralPredictor()`
+
+### 3.2 Uso no Método `step2_analyze`
+
+- [ ] Localizar método `step2_analyze` em `main.py`
+- [ ] Verificar que existe chamada:
+````
+
+for order in self.orders:
+dist = self.astar_engine.get_path_cost(self.depot_node, order.node_id, is_fragile=False)
+self.neural_engine.predict(order, dist) # ✅ Esta linha deve existir
+
+```
+- [ ] Se não existir, adicionar após o cálculo da distância
+
+### 3.3 Atualizar Modelo de Order (se necessário)
+
+- [ ] Abrir `src/models/order.py`
+- [ ] Verificar que a classe `Order` tem atributo:
+```
+
+self.delivery_time_estimate = None # ou 0.0
+
+```
+- [ ] Se não tiver, adicionar no `__init__`
+
+---
+
+## Passo 4: Testes
+
+### 4.1 Criar Arquivo de Teste
+
+- [ ] Criar arquivo `tests/test_neural.py` (ou adicionar no `test_improvements.py`)
+
+### 4.2 Teste de Treinamento
+
+- [ ] Implementar `test_neural_training()`:
+```
+
+def test_neural_training():
+"""Verifica que a RNA treina sem erros."""
+from src.ai.neural import NeuralPredictor
+
+      neural = NeuralPredictor(seed=42)
+      assert neural.model is not None, "Modelo não foi criado"
+      assert neural.scaler is not None, "Scaler não foi criado"
+      print("✅ RNA treinada com sucesso")
+
+```
+- [ ] Executar: `python tests/test_neural.py` ou `pytest tests/test_neural.py`
+
+### 4.3 Teste de Predição
+
+- [ ] Implementar `test_neural_prediction()`:
+```
+
+def test_neural_prediction():
+"""Verifica que a RNA faz predições válidas."""
+from src.ai.neural import NeuralPredictor
+from src.models.order import Order
+
+      neural = NeuralPredictor(seed=42)
+
+      order = Order(
+          id=1,
+          node_id=100,
+          deadline=60,
+          weight=15,
+          is_fragile=False,
+          is_vip=1
+      )
+
+      predicted_time = neural.predict(order, distance=10000)  # 10km
+
+      assert predicted_time > 0, "Tempo deve ser positivo"
+      assert predicted_time < 200, "Tempo deve ser razoável (<200min)"
+      assert order.delivery_time_estimate is not None, "Atributo não foi atualizado"
+
+      print(f"✅ Predição: {predicted_time:.2f} min para 10km")
+
+```
+- [ ] Executar teste e verificar sucesso
+
+### 4.4 Teste de Reprodutibilidade
+
+- [ ] Implementar `test_neural_reproducibility()`:
+```
+
+def test_neural_reproducibility():
+"""Verifica que a mesma seed produz mesmos resultados."""
+from src.ai.neural import NeuralPredictor
+from src.models.order import Order
+
+      neural1 = NeuralPredictor(seed=42)
+      neural2 = NeuralPredictor(seed=42)
+
+      order1 = Order(1, 100, 60, 15, False, 1)
+      order2 = Order(1, 100, 60, 15, False, 1)
+
+      time1 = neural1.predict(order1, 10000)
+      time2 = neural2.predict(order2, 10000)
+
+      # Deve ser próximo (pode ter pequena variação por tráfego aleatório)
+      assert abs(time1 - time2) < 5, "Resultados devem ser reproduzíveis"
+      print(f"✅ Reprodutibilidade: {time1:.2f} ≈ {time2:.2f}")
+
 ```
 
 ---
 
-### 3\. Ajuste Fino no Mapa (MapManager)
+## Passo 5: Teste de Integração Completo
 
-Como você quer consistência nos testes, vamos reduzir a probabilidade de "caos total" para evitar que pedidos nasçam em ilhas isoladas por bloqueios.
+### 5.1 Executar Sistema Completo
 
-**Arquivo:** `src/core/map_manager.py`
+- [ ] Rodar `python main.py`
+- [ ] Gerar pedidos (Botão "Gerar Pedidos" ou equivalente)
+- [ ] Clicar em "Analisar" (Step 2)
+- [ ] Verificar no console:
+```
 
-```python
-# No método enrich_map_with_obstacles
-# Reduza um pouco para garantir conectividade
-if random.random() < 0.08: # 8% de ruas ruins (era 10-20%)
-    data['pavement_quality'] = 'bad'
+[NeuralPredictor] Treinamento concluído. RMSE: 3.XX min
 
-if random.random() < 0.01: # 1% de bloqueios (Mantenha baixo)
-    data['road_block'] = True
+```
+- [ ] Verificar que não há erros
+
+### 5.2 Verificar Saída de Predições
+
+- [ ] Adicionar print temporário no `step2_analyze`:
+```
+
+for order in self.orders:
+dist = self.astar_engine.get_path_cost(...)
+self.neural_engine.predict(order, dist)
+print(f"[DEBUG] Order {order.id}: {order.delivery_time_estimate:.2f} min")
+
+```
+- [ ] Rodar sistema novamente
+- [ ] Confirmar que cada pedido recebe tempo estimado
+- [ ] Remover print após confirmar
+
+---
+
+## Passo 6: Documentação
+
+### 6.1 Comentários no Código
+
+- [ ] Adicionar comentário no topo de `neural.py`:
+```
+
+"""
+Módulo de Predição de Tempo de Entrega usando Rede Neural Artificial.
+
+Implementa MLPRegressor (Multi-Layer Perceptron) para estimar o tempo
+real de entrega baseado em características do pedido e condições da rota.
+
+Dataset de Treino: - 100 exemplos sintéticos - Features: distância, peso, prazo, tráfego - Target: tempo de entrega (minutos)
+
+Arquitetura: - Camada de entrada: 4 neurônios (features) - Camada oculta 1: 10 neurônios (ReLU) - Camada oculta 2: 5 neurônios (ReLU) - Camada de saída: 1 neurônio (tempo)
+"""
+
+```
+
+### 6.2 README (Opcional)
+
+- [ ] Adicionar seção em `README.md` explicando a RNA:
+```
+
+## Rede Neural Artificial
+
+- **Técnica**: Multi-Layer Perceptron (MLP)
+- **Biblioteca**: scikit-learn
+- **Dataset**: 100 entregas sintéticas
+- **Features**: distância, peso, prazo, tráfego
+- **Acurácia**: RMSE ~3 minutos
+
+```
+
+---
+
+## Passo 7: Validação Final
+
+- [ ] Todos os testes passam sem erros
+- [ ] Sistema inicializa sem travamentos
+- [ ] Predições retornam valores razoáveis (10-120 min para rotas típicas)
+- [ ] RMSE reportado é < 5 minutos
+- [ ] Código está comentado e legível
+
+---
+
+## Checklist de Conclusão
+
+- [ ] `src/ai/neural.py` reescrito completamente
+- [ ] Dataset sintético gera 100 exemplos
+- [ ] Treinamento funciona e imprime RMSE
+- [ ] Método `predict` retorna tempos válidos
+- [ ] Integração com `main.py` funciona
+- [ ] Atributo `order.delivery_time_estimate` é atualizado
+- [ ] Testes unitários criados e passando
+- [ ] Sistema completo roda sem erros
+- [ ] Documentação adicionada
+
+---
+
+## Tempo Estimado
+
+- ⏱️ Passos 1-2: 30-40 minutos
+- ⏱️ Passo 3: 10 minutos
+- ⏱️ Passos 4-5: 20-30 minutos
+- ⏱️ Passos 6-7: 10 minutos
+
+**Total: ~1h30min**
 ```

@@ -14,6 +14,7 @@ from src.ai.fuzzy import FuzzyPriority
 from src.ai.neural import NeuralPredictor
 from src.ai.genetic import GeneticTSP
 from src.ai.astar import AStarNavigator
+from src.ai.search import BasicSearch
 
 
 class Simulator:
@@ -34,7 +35,7 @@ class Simulator:
             graph: Pre-loaded and enriched NetworkX graph
             orders: List of Order objects to deliver
             depot_node: Starting depot node ID
-            mode: "smart" (AI-optimized) or "legacy" (simple deadline sorting)
+            mode: "smart" (AI-optimized), "legacy" (deadline sorting), "dfs", or "bfs"
         """
         self.graph = graph
         self.orders = orders
@@ -46,6 +47,7 @@ class Simulator:
         self.astar = AStarNavigator(self.graph)
         self.fuzzy = FuzzyPriority()
         self.neural = NeuralPredictor()
+        self.basic_search = BasicSearch(self.graph)
     
     def run(self) -> Dict[str, float]:
         """Execute simulation and return results.
@@ -60,6 +62,10 @@ class Simulator:
         
         if self.mode == "smart":
             return self._run_smart()
+        elif self.mode == "dfs":
+            return self._run_dfs()
+        elif self.mode == "bfs":
+            return self._run_bfs()
         else:
             return self._run_legacy()
     
@@ -106,13 +112,41 @@ class Simulator:
         
         return self._execute_delivery_route(optimized_orders, use_ai_pathing=True)
     
+    def _run_dfs(self) -> Dict[str, float]:
+        """Execute simulation using Depth-First Search pathfinding.
+        
+        Returns:
+            Simulation results dictionary
+        """
+        print("Running DFS Simulation (Depth-First Search)...")
+        
+        # Sort by deadline (no AI optimization)
+        sorted_orders = sorted(self.orders, key=lambda x: x.deadline)
+        
+        return self._execute_delivery_route(sorted_orders, use_ai_pathing=False, search_mode="dfs")
+    
+    def _run_bfs(self) -> Dict[str, float]:
+        """Execute simulation using Breadth-First Search pathfinding.
+        
+        Returns:
+            Simulation results dictionary
+        """
+        print("Running BFS Simulation (Breadth-First Search)...")
+        
+        # Sort by deadline (no AI optimization)
+        sorted_orders = sorted(self.orders, key=lambda x: x.deadline)
+        
+        return self._execute_delivery_route(sorted_orders, use_ai_pathing=False, search_mode="bfs")
+    
     def _execute_delivery_route(self, sequence_orders: List[Order], 
-                                use_ai_pathing: bool) -> Dict[str, float]:
+                                use_ai_pathing: bool,
+                                search_mode: str = "dijkstra") -> Dict[str, float]:
         """Simulate physical execution of delivery route.
         
         Args:
             sequence_orders: Ordered list of deliveries to make
-            use_ai_pathing: If True, use A* with constraints; if False, use Dijkstra
+            use_ai_pathing: If True, use A* with constraints; if False, use basic search
+            search_mode: "dijkstra" (default), "dfs", or "bfs"
             
         Returns:
             Dictionary with simulation metrics
@@ -127,7 +161,7 @@ class Simulator:
             # 1. Check capacity - return to depot if needed
             if not self.truck.can_load(order.weight):
                 has_fragile = len(self.truck.get_fragile_cargo()) > 0
-                path = self._get_path(current_node, self.depot_node, use_ai_pathing, has_fragile)
+                path = self._get_path(current_node, self.depot_node, use_ai_pathing, has_fragile, search_mode)
                 
                 t, d = self._traverse_path(path)
                 total_time_minutes += t
@@ -138,7 +172,7 @@ class Simulator:
             
             # 2. Travel to order pickup location
             has_fragile = len(self.truck.get_fragile_cargo()) > 0
-            path = self._get_path(current_node, order.node_id, use_ai_pathing, has_fragile)
+            path = self._get_path(current_node, order.node_id, use_ai_pathing, has_fragile, search_mode)
             
             if not path:
                 print(f"  Skipping unreachable order {order.id}")
@@ -156,7 +190,7 @@ class Simulator:
         
         # Return to depot at end
         has_fragile = len(self.truck.get_fragile_cargo()) > 0
-        path = self._get_path(current_node, self.depot_node, use_ai_pathing, has_fragile)
+        path = self._get_path(current_node, self.depot_node, use_ai_pathing, has_fragile, search_mode)
         t, d = self._traverse_path(path)
         total_time_minutes += t
         total_dist_km += d
@@ -166,28 +200,44 @@ class Simulator:
         avg_integrity = (sum(o.current_integrity for o in delivered_orders) / 
                         len(delivered_orders) if delivered_orders else 100.0)
         
+        # Determine mode name
+        if use_ai_pathing:
+            mode_name = "Smart"
+        elif search_mode == "dfs":
+            mode_name = "DFS"
+        elif search_mode == "bfs":
+            mode_name = "BFS"
+        else:
+            mode_name = "Legacy"
+        
         return {
-            "mode": "Smart" if use_ai_pathing else "Legacy",
+            "mode": mode_name,
             "time_total": total_time_minutes,
             "distance_km": total_dist_km,
             "avg_integrity": avg_integrity,
             "orders_delivered": len(delivered_orders)
         }
     
-    def _get_path(self, start: int, end: int, use_ai: bool, has_fragile: bool) -> List[int]:
+    def _get_path(self, start: int, end: int, use_ai: bool, has_fragile: bool, 
+                  search_mode: str = "dijkstra") -> List[int]:
         """Get path between two nodes based on routing mode.
         
         Args:
             start: Starting node ID
             end: Ending node ID
-            use_ai: If True, use A* with constraints; otherwise use Dijkstra
+            use_ai: If True, use A* with constraints
             has_fragile: Whether truck currently carries fragile cargo
+            search_mode: "dijkstra", "dfs", or "bfs"
             
         Returns:
             List of node IDs forming the path
         """
         if use_ai:
             return self.astar.get_path(start, end, is_fragile=has_fragile)
+        elif search_mode == "dfs":
+            return self.basic_search.dfs(start, end)
+        elif search_mode == "bfs":
+            return self.basic_search.bfs(start, end)
         else:
             try:
                 # Legacy: simple shortest path ignoring constraints
