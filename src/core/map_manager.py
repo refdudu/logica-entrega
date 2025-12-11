@@ -41,6 +41,50 @@ class MapManager:
             # Store speed limit helper
             if 'maxspeed' not in data:
                 data['maxspeed'] = 40
+    
+    def enrich_map_with_obstacles(self, graph: nx.MultiDiGraph, seed: int = 42) -> nx.MultiDiGraph:
+        """Enrich map with consistent obstacles using a seed.
+        
+        This ensures both Legacy and Smart simulations face the same challenges.
+        
+        Args:
+            graph: NetworkX graph to enrich
+            seed: Random seed for reproducibility
+            
+        Returns:
+            Enriched graph with pavement quality and road blocks
+        """
+        print(f"Enriching map with obstacles (seed={seed})...")
+        random.seed(seed)
+        
+        obstacle_count = {'bad_pavement': 0, 'road_blocks': 0}
+        
+        for u, v, k, data in graph.edges(keys=True, data=True):
+            # 10% chance of bad pavement (potholes) - reduced for better gameplay
+            if random.random() < 0.10:
+                data['pavement_quality'] = 'bad'
+                obstacle_count['bad_pavement'] += 1
+            elif 'pavement_quality' not in data:
+                data['pavement_quality'] = 'good'
+            
+            # 1% chance of road block - reduced for better gameplay
+            if random.random() < 0.01:
+                data['road_block'] = True
+                obstacle_count['road_blocks'] += 1
+            elif 'road_block' not in data:
+                data['road_block'] = False
+            
+            # Ensure traffic_level exists
+            if 'traffic_level' not in data:
+                data['traffic_level'] = random.uniform(0.0, 0.5)
+        
+        # Reset random state
+        random.seed()
+        
+        print(f"  Added {obstacle_count['bad_pavement']} bad pavement sections")
+        print(f"  Added {obstacle_count['road_blocks']} road blocks")
+        
+        return graph
 
     def get_random_node(self):
         """Returns a random node ID from the graph."""

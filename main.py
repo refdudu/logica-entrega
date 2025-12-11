@@ -4,7 +4,7 @@ import random
 import networkx as nx
 import time
 import threading
-from typing import List, Optional
+from typing import List, Optional, Dict
 from ui.map_view import MapView
 from ui.control_panel import ControlPanel
 
@@ -31,6 +31,9 @@ class LogisticsApp:
         # Map Loader
         self.map_manager = MapManager()
         self.graph = self.map_manager.load_graph()
+        
+        # Enrich map with consistent obstacles for fair comparison
+        self.graph = self.map_manager.enrich_map_with_obstacles(self.graph, seed=123)
         
         # AI Engines
         self.fuzzy_engine = FuzzyPriority()
@@ -120,50 +123,22 @@ class LogisticsApp:
         self.control_panel.update_results("Calculando rotas...")
         
         try:
-            # --- 1. RUN LEGACY CALCULATION ---
-            legacy_path = self._calculate_legacy_path()
-            legacy_dist = 0
-            if legacy_path:
-                legacy_dist = self._calculate_path_length(legacy_path)
+            # Import Simulator here to avoid circular dependency
+            from src.core.simulator import Simulator
+            
+            # --- 1. RUN LEGACY SIMULATION ---
+            legacy_sim = Simulator(self.graph, self.orders, self.depot_node, mode="legacy")
+            legacy_res = legacy_sim.run()
                 
-            # --- 2. RUN SMART CALCULATION ---
-            # Analyze orders
-            for order in self.orders:
-                dist = self.astar_engine.get_path_cost(
-                    self.depot_node, order.node_id, is_fragile=False
-                )
-                self.fuzzy_engine.calculate(order, dist if dist != float('inf') else 5000)
-                self.neural_engine.predict(order)
+            # --- 2. RUN SMART SIMULATION ---
+            smart_sim = Simulator(self.graph, self.orders, self.depot_node, mode="smart")
+            smart_res = smart_sim.run()
             
             # Update UI from thread safely
             self.root.after(0, lambda: self.control_panel.update_table(self.orders))
-            self.root.after(0, lambda: self.map_view_smart.draw_analyzed_orders(self.orders, self.graph))
-
-            # Optimize with progress callback
-            def update_progress(current_gen: int, total_gens: int) -> None:
-                progress_msg = f"Otimizando rotas... {current_gen}/{total_gens} gerações"
-                self.root.after(0, lambda: self.control_panel.update_results(progress_msg))
-            
-            ga = GeneticTSP(
-                self.orders, 
-                self.depot_node, 
-                self.astar_engine, 
-                truck_capacity=30.0, 
-                generations=20,
-                progress_callback=update_progress
-            )
-            self.optimized_sequence = ga.solve()
-            
-            # Navigate
-            smart_path = self._calculate_smart_path()
-            smart_dist = 0
-            if smart_path:
-                smart_dist = self._calculate_smart_dist(smart_path)
 
             # --- 3. ANIMATE BOTH (on main thread) ---
-            self.root.after(0, lambda: self._animate_comparison(
-                legacy_path, legacy_dist, smart_path, smart_dist
-            ))
+            self.root.after(0, lambda: self._display_comparison_results(legacy_res, smart_res))
             
         except Exception as e:
             error_msg = f"Erro durante otimização: {str(e)}"
@@ -171,53 +146,37 @@ class LogisticsApp:
         finally:
             self.root.after(0, lambda: self.root.config(cursor=""))
     
-    def _animate_comparison(self, legacy_path: List[int], legacy_dist: float,
-                           smart_path: List[int], smart_dist: float) -> None:
-        """Animate both routes and display comparison results (must run on main thread)."""
-        if legacy_path:
-            self.map_view_legacy.animate_route(legacy_path, self.graph, None)
-        else:
-            messagebox.showwarning("Legacy", "Legacy falhou (sem rota).")
-            
-        if smart_path:
-            self.map_view_smart.animate_route(smart_path, self.graph, None)
-        else:
-            messagebox.showwarning("Smart", "Smart falhou (sem rota).")
-        
-        # --- 4. SHOW RESULTS ---
-        # Check if Legacy hit a block
-        legacy_valid = True
-        legacy_block_count = 0
-        if legacy_path:
-            for i in range(len(legacy_path)-1):
-                u, v = legacy_path[i], legacy_path[i+1]
-                d = self.graph.get_edge_data(u, v)[0]
-                if d.get('road_block', False):
-                    legacy_valid = False
-                    legacy_block_count += 1
-
-        legacy_status = f"{legacy_dist/1000:.2f} km"
-        if not legacy_valid:
-            legacy_status += f"\n   ❌ FALHOU: Atravessou {legacy_block_count} via(s) bloqueada(s)!"
-        else:
-            legacy_status += "\n   ✅ Sucesso (Sorte!)"
-
+    def _display_comparison_results(self, legacy_res: Dict, smart_res: Dict) -> None:
+        """Display comparison results with integrity metrics."""
         results_str = (
             f"📍 LEGACY (Sem IA):\n"
-            f"   Distância: {legacy_status}\n\n"
+            f"   Tempo Total: {legacy_res['time_total']:.0f} min\n"
+            f"   Integridade Média: {legacy_res['avg_integrity']:.1f}%\n"
+            f"   Distância: {legacy_res['distance_km']:.2f} km\n"
+            f"   Pedidos: {legacy_res['orders_delivered']}\n\n"
+            
             f"🧠 SMART (Com IA):\n"
-            f"   Distância: {smart_dist/1000:.2f} km\n"
-            f"   ✅ Evitou bloqueios e trânsito\n\n"
+            f"   Tempo Total: {smart_res['time_total']:.0f} min\n"
+            f"   Integridade Média: {smart_res['avg_integrity']:.1f}%\n"
+            f"   Distância: {smart_res['distance_km']:.2f} km\n"
+            f"   Pedidos: {smart_res['orders_delivered']}\n\n"
             f"🏆 Veredito: "
         )
         
-        if not legacy_valid:
-            results_str += "Smart Venceu (Legacy bateu)!"
-        elif legacy_dist > 0 and smart_dist > 0:
-            if smart_dist < legacy_dist:
-                results_str += "Smart Venceu (Menor Distância)!"
-            else:
-                results_str += "Smart foi mais cauteloso."
+        # Determine winner based on integrity first, then time
+        integrity_diff = smart_res['avg_integrity'] - legacy_res['avg_integrity']
+        time_diff = legacy_res['time_total'] - smart_res['time_total']
+        
+        if integrity_diff > 10:
+            results_str += f"Smart Venceu (Carga {integrity_diff:.1f}% mais intacta!)"
+        elif integrity_diff < -10:
+            results_str += f"Legacy Venceu (Carga {-integrity_diff:.1f}% mais intacta)"
+        elif time_diff > 20:
+            results_str += f"Smart Venceu ({time_diff:.0f} min mais rápido!)"
+        elif time_diff < -20:
+            results_str += f"Legacy Venceu ({-time_diff:.0f} min mais rápido)"
+        else:
+            results_str += "Empate Técnico"
         
         self.control_panel.update_results(results_str)
 

@@ -1,9 +1,13 @@
-import networkx as nx
-import random
-import time
-from copy import deepcopy
+"""
+Simulator module with dependency injection for consistent testing.
 
-from src.core.map_manager import MapManager
+Implements real-world delivery simulation with cargo integrity tracking,
+road obstacles, and time-based penalties.
+"""
+
+import networkx as nx
+from typing import List, Dict, Tuple
+
 from src.models.order import Order
 from src.models.truck import Truck
 from src.ai.fuzzy import FuzzyPriority
@@ -11,268 +15,252 @@ from src.ai.neural import NeuralPredictor
 from src.ai.genetic import GeneticTSP
 from src.ai.astar import AStarNavigator
 
+
 class Simulator:
-    def __init__(self, num_orders=15, mode="smart"):
-        self.num_orders = num_orders
+    """Delivery route simulator with AI integration.
+    
+    Simulates real-world delivery scenarios including:
+    - Cargo integrity damage on bad roads
+    - Time penalties from road blocks
+    - Capacity constraints requiring depot returns
+    - Fragile cargo requiring careful routing
+    """
+    
+    def __init__(self, graph: nx.MultiDiGraph, orders: List[Order], 
+                 depot_node: int, mode: str = "smart") -> None:
+        """Initialize simulator with dependency injection.
+        
+        Args:
+            graph: Pre-loaded and enriched NetworkX graph
+            orders: List of Order objects to deliver
+            depot_node: Starting depot node ID
+            mode: "smart" (AI-optimized) or "legacy" (simple deadline sorting)
+        """
+        self.graph = graph
+        self.orders = orders
+        self.depot_node = depot_node
         self.mode = mode
         
-        # 1. Init Map
-        self.map_manager = MapManager()
-        self.graph = self.map_manager.load_graph()
-        self.astar = AStarNavigator(self.graph)
-        
-        # 2. Init Models
-        self.orders = []
-        self.depot_node = list(self.graph.nodes())[0] # Simplification
+        # Initialize subsystems
         self.truck = Truck(capacity=30.0)
-        
-        # 3. Init AI
+        self.astar = AStarNavigator(self.graph)
         self.fuzzy = FuzzyPriority()
         self.neural = NeuralPredictor()
+    
+    def run(self) -> Dict[str, float]:
+        """Execute simulation and return results.
         
-        # Generate random orders
-        self._generate_orders()
-
-    def _generate_orders(self):
-        print(f"Generating {self.num_orders} orders...")
-        for i in range(self.num_orders):
-            node_id = self.map_manager.get_random_node()
-            # Random attributes
-            deadline = random.randint(10, 120)
-            weight = random.uniform(1.0, 15.0)
-            is_fragile = random.choice([True, False])
-            priority_class = random.choice([0, 1])
-            
-            order = Order(i+1, node_id, deadline, weight, is_fragile, priority_class)
-            self.orders.append(order)
-
-    def run(self):
+        Returns:
+            Dictionary with: mode, time_total, distance_km, avg_integrity, orders_delivered
+        """
+        # Reset all orders to 100% integrity before simulation
+        for order in self.orders:
+            order.current_integrity = 100.0
+            order.delivered = False
+        
         if self.mode == "smart":
             return self._run_smart()
         else:
             return self._run_legacy()
-
-    def _calculate_real_cost(self, path):
-        """Calculates the actual time/cost taken to traverse a path, considering current conditions."""
-        total_time = 0.0
-        damaged_cargo = False
+    
+    def _run_legacy(self) -> Dict[str, float]:
+        """Execute legacy simulation using simple deadline sorting.
         
-        for i in range(len(path) - 1):
-            u, v = path[i], path[i+1]
-            data = self.graph.get_edge_data(u, v)[0]
-            
-            # Real traversal physics
-            
-            # 1. Road Block?
-            # If path was planned on a road block (Legacy might do this), effectively infinite delay or reroute.
-            # Simplified: add huge penalty.
-            if data.get('road_block'):
-                total_time += 3600 # 1 hour stuck/rerouting
-            
-            # 2. Pavement & Fragility
-            # If cargo is fragile and pavement is bad -> Damage
-            # We need to know if we are carrying fragile cargo *at this moment*.
-            # Simplified: If any order in the truck is fragile? 
-            # Or just count stats.
-            # Let's assume the truck currently has the relevant cargo.
-            # This is hard to track without full state. 
-            # We will approximate: we track "Fragile Orders Broken" count.
-            
-            pavement_quality = data.get('pavement_quality', 'good')
-            if pavement_quality == 'bad':
-                total_time += data.get('travel_time', 0) * 0.4 # Slower
-                # If we are carrying fragile, mark damage potential
-                # We handle this in the main loop traversal
-            
-            traffic = data.get('traffic_level', 0)
-            effective_time = data.get('travel_time', 1.0) * (1.0 + traffic)
-            total_time += effective_time
-            
-        return total_time
-
-    def _run_legacy(self):
-        print("Running Legacy Simulation...")
-        start_time = time.time()
+        Returns:
+            Simulation results dictionary
+        """
+        print("Running Legacy Simulation (Simple Deadline Sorting)...")
         
-        # 1. Sort by Deadline (Simple)
+        # Sort by deadline only (no AI)
         sorted_orders = sorted(self.orders, key=lambda x: x.deadline)
         
-        total_dist = 0.0
-        total_travel_time = 0.0
-        broken_fragile_count = 0
+        return self._execute_delivery_route(sorted_orders, use_ai_pathing=False)
+    
+    def _run_smart(self) -> Dict[str, float]:
+        """Execute smart simulation using full AI pipeline.
         
-        current_node = self.depot_node
-        self.truck.reset_load()
+        Returns:
+            Simulation results dictionary
+        """
+        print("Running Smart Simulation (AI Pipeline)...")
         
-        # Route: simply go to next in list
-        # If full, go to depot, then next.
-        
-        # Path trace
-        trace = [current_node]
-        
-        for order in sorted_orders:
-            # Check capacity
-            if not self.truck.can_load(order.weight):
-                # Go to depot
-                path_to_depot = nx.shortest_path(self.graph, current_node, self.depot_node, weight='length')
-                # Calculate real cost
-                total_travel_time += self._traverse_path(path_to_depot, has_fragile=False) # Empty return?
-                trace.extend(path_to_depot[1:])
-                current_node = self.depot_node
-                self.truck.reset_load()
-            
-            # Go to order
-            try:
-                # Dijkstra using 'length' (ignores traffic/pavement)
-                path = nx.shortest_path(self.graph, current_node, order.node_id, weight='length')
-                
-                # Check for damage during traversal
-                trip_time, damaged = self._traverse_path_detailed(path, is_fragile=order.is_fragile)
-                total_travel_time += trip_time
-                if damaged and order.is_fragile:
-                    broken_fragile_count += 1
-                
-                trace.extend(path[1:])
-                total_dist += nx.path_weight(self.graph, path, weight='length')
-                
-                self.truck.load(order.weight)
-                current_node = order.node_id
-                
-            except nx.NetworkXNoPath:
-                print(f"Unreachable order {order.id}")
-        
-        # Return to depot
-        path = nx.shortest_path(self.graph, current_node, self.depot_node, weight='length')
-        t, _ = self._traverse_path_detailed(path, False)
-        total_travel_time += t
-        trace.extend(path[1:])
-        
-        return {
-            "mode": "Legacy",
-            "time_total": total_travel_time / 60.0, # minutes
-            "distance_km": total_dist / 1000.0,
-            "broken_fragile": broken_fragile_count,
-            "orders_delivered": len(sorted_orders) # Assumption
-        }
-
-    def _run_smart(self):
-        print("Running Smart Simulation...")
-        
-        # 1. Fuzzy & Neural
-        current_node = self.depot_node
+        # 1. Analyze orders with Fuzzy Logic and Neural Network
         for order in self.orders:
-            # Estimate distance for fuzzy (using air dist or prev known)
-            # Use A* cost from depot as approximation
-            dist = self.astar.get_path_cost(self.depot_node, order.node_id, is_fragile=False)
-            self.fuzzy.calculate(order, dist)
+            dist = self.astar.get_path_cost(
+                self.depot_node, order.node_id, is_fragile=False
+            )
+            self.fuzzy.calculate(order, dist if dist != float('inf') else 5000)
             self.neural.predict(order)
         
-        # 2. Genetic Optimization
+        # 2. Optimize route with Genetic Algorithm
         print("Optimizing route (Genetic Algorithm)...")
-        ga = GeneticTSP(self.orders, self.depot_node, self.astar, truck_capacity=30.0)
+        ga = GeneticTSP(
+            self.orders, 
+            self.depot_node, 
+            self.astar, 
+            truck_capacity=30.0,
+            generations=30
+        )
         best_indices = ga.solve()
-        
-        # 3. Execution using A* paths
-        print("Executing Smart Route...")
         optimized_orders = [self.orders[i] for i in best_indices]
         
-        total_dist = 0.0
-        total_travel_time = 0.0
-        broken_fragile_count = 0
+        return self._execute_delivery_route(optimized_orders, use_ai_pathing=True)
+    
+    def _execute_delivery_route(self, sequence_orders: List[Order], 
+                                use_ai_pathing: bool) -> Dict[str, float]:
+        """Simulate physical execution of delivery route.
         
-        self.truck.reset_load()
+        Args:
+            sequence_orders: Ordered list of deliveries to make
+            use_ai_pathing: If True, use A* with constraints; if False, use Dijkstra
+            
+        Returns:
+            Dictionary with simulation metrics
+        """
+        total_time_minutes = 0.0
+        total_dist_km = 0.0
+        
         current_node = self.depot_node
+        self.truck.unload_all()
         
-        for order in optimized_orders:
-            # Capacity check (Genetic should have optimized, but we simulate execution)
+        for order in sequence_orders:
+            # 1. Check capacity - return to depot if needed
             if not self.truck.can_load(order.weight):
-                 # Return to depot
-                 path = self.astar.get_path(current_node, self.depot_node, is_fragile=False)
-                 t, d = self._traverse_path_detailed(path, False)
-                 total_travel_time += t
-                 current_node = self.depot_node
-                 self.truck.reset_load()
-            
-            # Go to order (Smart Path)
-            path = self.astar.get_path(current_node, order.node_id, is_fragile=order.is_fragile)
-            if not path:
-                # Retry without fragile constraints? No, smart skips or fails.
-                print(f"Smart: Could not reach {order.id}")
-                continue
+                has_fragile = len(self.truck.get_fragile_cargo()) > 0
+                path = self._get_path(current_node, self.depot_node, use_ai_pathing, has_fragile)
                 
-            t, damaged = self._traverse_path_detailed(path, is_fragile=order.is_fragile)
-            total_travel_time += t
-            if damaged and order.is_fragile:
-                broken_fragile_count += 1
+                t, d = self._traverse_path(path)
+                total_time_minutes += t
+                total_dist_km += d
+                
+                current_node = self.depot_node
+                self.truck.unload_all()
             
-            # Approximate distance (just for stats)
-            # path_weight using length
-            for i in range(len(path)-1):
-                 d = self.graph.get_edge_data(path[i], path[i+1])[0]
-                 total_dist += d.get('length', 0)
-
-            self.truck.load(order.weight)
+            # 2. Travel to order pickup location
+            has_fragile = len(self.truck.get_fragile_cargo()) > 0
+            path = self._get_path(current_node, order.node_id, use_ai_pathing, has_fragile)
+            
+            if not path:
+                print(f"  Skipping unreachable order {order.id}")
+                continue
+            
+            # 3. Traverse path and apply damage to cargo
+            t, d = self._traverse_path(path)
+            total_time_minutes += t
+            total_dist_km += d
+            
+            # 4. Load order and mark as delivered
+            self.truck.load_order(order)
+            order.delivered = True
             current_node = order.node_id
-
-        # Return to depot
-        path = self.astar.get_path(current_node, self.depot_node, is_fragile=False)
-        t, _ = self._traverse_path_detailed(path, False)
-        total_travel_time += t
+        
+        # Return to depot at end
+        has_fragile = len(self.truck.get_fragile_cargo()) > 0
+        path = self._get_path(current_node, self.depot_node, use_ai_pathing, has_fragile)
+        t, d = self._traverse_path(path)
+        total_time_minutes += t
+        total_dist_km += d
+        
+        # Calculate average integrity
+        delivered_orders = [o for o in sequence_orders if o.delivered]
+        avg_integrity = (sum(o.current_integrity for o in delivered_orders) / 
+                        len(delivered_orders) if delivered_orders else 100.0)
         
         return {
-            "mode": "Smart",
-            "time_total": total_travel_time / 60.0,
-            "distance_km": total_dist / 1000.0,
-            "broken_fragile": broken_fragile_count,
-            "orders_delivered": len(optimized_orders) # Assumption
+            "mode": "Smart" if use_ai_pathing else "Legacy",
+            "time_total": total_time_minutes,
+            "distance_km": total_dist_km,
+            "avg_integrity": avg_integrity,
+            "orders_delivered": len(delivered_orders)
         }
-
-    def _traverse_path_detailed(self, path, is_fragile):
-        """Simulates driving the path and returns (time_taken, is_damaged)"""
-        time_taken = 0.0
-        damaged = False
+    
+    def _get_path(self, start: int, end: int, use_ai: bool, has_fragile: bool) -> List[int]:
+        """Get path between two nodes based on routing mode.
         
-        if not path: return 0.0, False
-
+        Args:
+            start: Starting node ID
+            end: Ending node ID
+            use_ai: If True, use A* with constraints; otherwise use Dijkstra
+            has_fragile: Whether truck currently carries fragile cargo
+            
+        Returns:
+            List of node IDs forming the path
+        """
+        if use_ai:
+            return self.astar.get_path(start, end, is_fragile=has_fragile)
+        else:
+            try:
+                # Legacy: simple shortest path ignoring constraints
+                return nx.shortest_path(self.graph, start, end, weight='length')
+            except nx.NetworkXNoPath:
+                return []
+    
+    def _traverse_path(self, path: List[int]) -> Tuple[float, float]:
+        """Traverse a path and apply real-world effects.
+        
+        Calculates travel time considering traffic and obstacles.
+        Applies damage to fragile cargo on bad roads.
+        
+        Args:
+            path: List of node IDs to traverse
+            
+        Returns:
+            Tuple of (time_in_minutes, distance_in_km)
+        """
+        if not path:
+            return 0.0, 0.0
+        
+        time_seconds = 0.0
+        distance_meters = 0.0
+        
         for i in range(len(path) - 1):
             u, v = path[i], path[i+1]
-            # Handle MultiDiGraph
-            all_edges = self.graph.get_edge_data(u, v)
-            # With A* or shortest_path, we assume the best edge was picked if multiples exist?
-            # Or we just take key=0
-            data = all_edges[0]
             
-            length = data.get('length', 100)
-            traffic = data.get('traffic_level', 0.0)
-            pavement = data.get('pavement_quality', 'good')
-            road_block = data.get('road_block', False)
+            # Get edge data (handle MultiDiGraph)
+            edge_data = self.graph.get_edge_data(u, v)
+            if not edge_data:
+                continue
+            data = edge_data[0]  # Take first edge if multiple exist
             
-            # 1. Physics
-            if road_block:
-                time_taken += 1800 # 30 mins penalty
+            length_m = data.get('length', 100)
+            distance_meters += length_m
             
-            # Speed logic re-use?
-            # Base speed
-            speed_limit = data.get('maxspeed', 40.0)
-            if isinstance(speed_limit, list): speed_limit = float(speed_limit[0])
-            else: speed_limit = float(speed_limit)
-
-            effective_speed = speed_limit * (1.0 - traffic * 0.8)
-            if pavement == 'bad':
-                effective_speed *= 0.6 # Bad pavement slows down
-                if is_fragile:
-                    damaged = True # Fragile on bad pavement breaks
+            # ** FEATURE 2: Road Block Penalty **
+            if data.get('road_block', False):
+                # Massive time penalty: 120 minutes stuck
+                time_seconds += 120 * 60
+                print(f"  ⚠️ Hit road block on edge {u}-{v} (+120min penalty)")
             
-            if effective_speed < 1: effective_speed = 1.0
+            # ** Calculate normal travel time **
+            speed_kmh = float(data.get('maxspeed', 40))
+            if isinstance(speed_kmh, list):
+                speed_kmh = float(speed_kmh[0])
             
-            # Time = Distance / Speed
-            # m / (km/h / 3.6) -> s
-            segment_time = length / (effective_speed / 3.6)
-            time_taken += segment_time
+            # Traffic slowdown
+            traffic_factor = 1.0 + data.get('traffic_level', 0.0)
+            
+            # Bad pavement slowdown
+            pavement_quality = data.get('pavement_quality', 'good')
+            if pavement_quality == 'bad':
+                speed_kmh *= 0.6  # 40% slower on bad roads
+            
+            effective_speed_kmh = speed_kmh / traffic_factor
+            if effective_speed_kmh < 5:
+                effective_speed_kmh = 5  # Minimum speed
+            
+            # Time = Distance / Speed (convert to seconds)
+            segment_time_hours = (length_m / 1000.0) / effective_speed_kmh
+            time_seconds += segment_time_hours * 3600
+            
+            # ** FEATURE 1: Cargo Integrity Damage **
+            if pavement_quality == 'bad':
+                # Apply damage to fragile items in cargo
+                damage_per_100m = 5.0  # 5% damage per 100m on bad roads
+                damage_ticks = (length_m / 100.0) * damage_per_100m
+                
+                for order in self.truck.get_fragile_cargo():
+                    order.current_integrity -= damage_ticks
+                    if order.current_integrity < 0:
+                        order.current_integrity = 0.0
         
-        return time_taken, damaged
-
-    def _traverse_path(self, path, has_fragile):
-        # Wrapper for simple cost
-        t, _ = self._traverse_path_detailed(path, has_fragile)
-        return t
+        return time_seconds / 60.0, distance_meters / 1000.0

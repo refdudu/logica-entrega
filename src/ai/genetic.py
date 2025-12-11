@@ -32,11 +32,12 @@ class GeneticTSP:
         self.progress_callback = progress_callback
 
     def _calculate_fitness(self, individual: List[int]) -> float:
-        """Calculate fitness score integrating travel cost and fuzzy priority.
+        """Calculate fitness score integrating travel cost, fuzzy priority, and fragility.
         
-        The fitness function penalizes routes that deliver high-priority orders late.
-        This integrates Fuzzy Logic output (order.fuzzy_priority) with the Genetic Algorithm,
-        creating a truly intelligent system that considers both route efficiency and urgency.
+        The fitness function optimizes for:
+        1. Routes that deliver high-priority orders early
+        2. Routes that deliver fragile items later (reduces detour penalty)
+        3. Minimizing total travel cost
         
         Args:
             individual: Sequence of order indices representing a route
@@ -48,9 +49,12 @@ class GeneticTSP:
         current_node = self.depot_node
         current_load = 0.0
         current_time = 0.0  # Accumulated time for priority penalty calculation
+        fragile_position_penalty = 0.0  # Penalty for fragile items delivered early
+        
+        total_orders = len(individual)
         
         # Iterate through the sequence of orders
-        for order_index in individual:
+        for position, order_index in enumerate(individual):
             order = self.orders[order_index]
             
             # Check capacity constraint
@@ -82,6 +86,15 @@ class GeneticTSP:
             time_penalty = current_time * (priority_weight / 5.0)
             total_score += time_penalty
             
+            # ** FRAGILITY OPTIMIZATION: Position-based penalty **
+            # Fragile items delivered early in the route add penalty
+            # This encourages delivering fragile items later, reducing total detour distance
+            if order.is_fragile:
+                # Higher penalty for fragile items in early positions
+                # Position 0 = highest penalty, last position = no penalty
+                position_ratio = 1.0 - (position / max(total_orders - 1, 1))
+                fragile_position_penalty += position_ratio * 50.0  # Base penalty of 50
+            
             # Update state
             current_node = order.node_id
             current_load += order.weight
@@ -91,6 +104,9 @@ class GeneticTSP:
             current_node, self.depot_node, is_fragile=False
         )
         total_score += final_cost
+        
+        # Add fragile position penalty to total score
+        total_score += fragile_position_penalty
         
         # Convert to fitness (minimize total_score)
         return 1.0 / (total_score + 1e-6)
