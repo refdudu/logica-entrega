@@ -44,13 +44,15 @@ class ControlPanel(tk.Frame):
         tk.Frame(self, height=2, bd=1, relief=tk.SUNKEN).pack(fill=tk.X, padx=5, pady=10)
 
         # Tabela de Pedidos
-        self.tree = ttk.Treeview(self, columns=('ID', 'Peso', 'Prazo', 'VIP', 'Pri', 'Risco'), show='headings', height=12)
+        # ✅ ADICIONADA COLUNA 'Obs'
+        self.tree = ttk.Treeview(self, columns=('ID', 'Peso', 'Prazo', 'VIP', 'Pri', 'Risco', 'Obs'), show='headings', height=12)
         self.tree.heading('ID', text='ID')
         self.tree.heading('Peso', text='Peso (kg)')
         self.tree.heading('Prazo', text='Prazo (min)')
         self.tree.heading('VIP', text='VIP')
         self.tree.heading('Pri', text='Prioridade')
         self.tree.heading('Risco', text='Risco Atraso')
+        self.tree.heading('Obs', text='Obs')
         
         self.tree.column('ID', width=30)
         self.tree.column('Peso', width=60)
@@ -58,6 +60,7 @@ class ControlPanel(tk.Frame):
         self.tree.column('VIP', width=40)
         self.tree.column('Pri', width=60)
         self.tree.column('Risco', width=80)
+        self.tree.column('Obs', width=90)
         self.tree.pack(pady=20, fill=tk.X)
 
     def get_order_count(self):
@@ -74,7 +77,15 @@ class ControlPanel(tk.Frame):
             self.tree.delete(i)
         for o in orders:
             vip_str = "Sim" if o.priority_class == 1 else "Não"
-            self.tree.insert('', 'end', values=(o.id, o.weight, int(o.deadline), vip_str, f"{o.fuzzy_priority:.1f}", o.risk_level))
+            
+            # ✅ Lógica visual para coluna Obs
+            obs = ""
+            if getattr(o, 'unavoidable_bad_road', False):
+                obs = "⚠️ Inevitável"
+            elif o.risk_level == "HIGH":
+                obs = "Atraso!"
+            
+            self.tree.insert('', 'end', values=(o.id, o.weight, int(o.deadline), vip_str, f"{o.fuzzy_priority:.1f}", o.risk_level, obs))
 
     def set_nav_button_state(self, state):
         # self.nav_button.config(state=state)

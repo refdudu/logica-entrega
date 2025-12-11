@@ -20,6 +20,9 @@ class Order:
     current_integrity: float = 100.0  # Starts at 100%
     delivered: bool = False
     
+    # ✅ NOVO: Indica se a IA percebeu que não havia escapatória
+    unavoidable_bad_road: bool = False
+    
     def __post_init__(self):
         # Validation or default processing if needed
         pass

@@ -92,11 +92,43 @@ class Simulator:
         
         # 1. Analyze orders with Fuzzy Logic and Neural Network
         for order in self.orders:
-            dist = self.astar.get_path_cost(
-                self.depot_node, order.node_id, is_fragile=False
-            )
-            self.fuzzy.calculate(order, dist if dist != float('inf') else 5000)
-            self.neural.predict(order, dist if dist != float('inf') else 5000)
+            # Calcula caminho e distância
+            path = self.astar.get_path(self.depot_node, order.node_id, is_fragile=order.is_fragile)
+            
+            dist_meters = 0
+            bad_meters = 0
+            
+            if path:
+                # Analisa o caminho para calcular bad_road_ratio
+                for i in range(len(path) - 1):
+                    u, v = path[i], path[i+1]
+                    edge_data = self.graph.get_edge_data(u, v)
+                    
+                    # Handle MultiDiGraph (get first edge)
+                    if edge_data:
+                        data = edge_data[0] if isinstance(edge_data, dict) and 0 in edge_data else edge_data
+                        length = data.get('length', 100)
+                        dist_meters += length
+                        
+                        # Conta metros de estrada ruim
+                        if data.get('pavement_quality') == 'bad' or data.get('road_block'):
+                            bad_meters += length
+            
+            # 2. Calcula Ratio e verifica Inevitabilidade
+            ratio = (bad_meters / dist_meters) if dist_meters > 0 else 0.0
+            
+            if bad_meters > 0:
+                # ✅ Verifica se a IA foi "forçada" a passar por estrada ruim
+                order.unavoidable_bad_road = self.astar.check_if_bad_road_is_unavoidable(
+                    self.depot_node, order.node_id
+                )
+            else:
+                order.unavoidable_bad_road = False
+            
+            # 3. Predição com nova feature (bad_road_ratio)
+            dist = dist_meters if dist_meters > 0 else 5000
+            self.neural.predict(order, dist, bad_road_ratio=ratio)
+            self.fuzzy.calculate(order, dist)
         
         # 2. Optimize route with Genetic Algorithm
         print("Optimizing route (Genetic Algorithm)...")
@@ -308,7 +340,8 @@ class Simulator:
                 # ✅ REDUZIR: 0.5% por 100m (era 0.8% ou 1.5%)
                 # Com penalização 40x, Smart ainda pode passar por 200-300m ruins
                 # Precisamos que isso cause <5% de dano
-                damage_per_100m = 0.5  # Mais realista
+                # damage_per_100m = 0.5  # Mais realista
+                damage_per_100m = 1  # Mais realista
                 damage_ticks = (length_m / 100.0) * damage_per_100m
                 
                 for order in self.truck.get_fragile_cargo():

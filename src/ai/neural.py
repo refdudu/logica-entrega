@@ -26,18 +26,32 @@ import random
 
 
 class NeuralPredictor:
-    """Preditor de tempo de entrega usando Rede Neural Artificial (RNA) com TensorFlow.
+    """Singleton Neural Network Predictor com TensorFlow.
     
-    Treina com dataset sintético baseado em simulações realistas de entregas
-    considerando hora do dia, dia da semana, distância, peso, fragilidade e tráfego.
+    Treina uma vez e reutiliza o modelo em todas as instâncias,
+    considerando hora do dia, dia da semana, distância, peso, fragilidade,
+    tráfego e proporção de estradas ruins (bad_road_ratio).
     """
     
+    _instance = None
+    
+    def __new__(cls, *args, **kwargs):
+        """Implementação do Singleton pattern."""
+        if cls._instance is None:
+            cls._instance = super(NeuralPredictor, cls).__new__(cls)
+            cls._instance.initialized = False
+        return cls._instance
+
     def __init__(self, seed: int = 42) -> None:
-        """Inicializa e treina a rede neural.
+        """Inicializa e treina a rede neural (apenas uma vez devido ao Singleton).
         
         Args:
             seed: Semente para reprodutibilidade
         """
+        if self.initialized:
+            return
+        
+        print("[NeuralPredictor] Inicializando Singleton e treinando modelo...")
         self.seed = seed
         random.seed(seed)
         np.random.seed(seed)
@@ -47,6 +61,7 @@ class NeuralPredictor:
         self.scaler_y = StandardScaler()
         self.model = None
         self._train()
+        self.initialized = True
     
     def _generate_training_data(self, n_samples: int = 1000) -> tuple:
         """Gera dataset sintético realista para treinamento.
@@ -58,6 +73,7 @@ class NeuralPredictor:
         - peso_kg: 1-30
         - eh_fragil: 0 ou 1
         - trafego: 0-1 (0=livre, 1=congestionado)
+        - ✅ bad_road_ratio: 0-0.5 (proporção de estradas ruins no trajeto)
         
         Returns:
             Tuple (X, y) com features e targets
@@ -74,6 +90,9 @@ class NeuralPredictor:
             fragil = random.choice([0, 1])
             trafego = random.uniform(0, 1)
             
+            # ✅ NOVA FEATURE: Proporção de estradas ruins (0% a 50%)
+            bad_ratio = random.uniform(0, 0.5)
+            
             # Tempo calculado com lógica realista
             tempo_base = distancia * 2.5  # ~2.5 min/km em cidade
             
@@ -85,10 +104,13 @@ class NeuralPredictor:
             if fragil:  # Carga frágil = mais cuidado
                 tempo_base *= 1.2
             
-            tempo_base += trafego * 15  # Tráfego adiciona até 15min
+            # ✅ Penalidade por rua ruim (quanto maior o ratio, mais devagar)
+            if bad_ratio > 0.1:
+                tempo_base *= (1.0 + bad_ratio)
+                tempo_base += trafego * 15  # Tráfego adiciona até 15min
             tempo_base += random.gauss(0, 2)  # Ruído realista
             
-            X.append([hora, dia_semana, distancia, peso, fragil, trafego])
+            X.append([hora, dia_semana, distancia, peso, fragil, trafego, bad_ratio])
             y.append(max(5, tempo_base))  # Mínimo 5 min
         
         return np.array(X), np.array(y)
@@ -100,7 +122,7 @@ class NeuralPredictor:
             Modelo Keras compilado
         """
         model = tf.keras.Sequential([
-            tf.keras.layers.Dense(32, activation='relu', input_shape=(6,)),
+            tf.keras.layers.Dense(32, activation='relu', input_shape=(7,)),  # ✅ 7 Features
             tf.keras.layers.Dropout(0.3),
             tf.keras.layers.Dense(16, activation='relu'),
             tf.keras.layers.Dropout(0.2),
@@ -147,12 +169,13 @@ class NeuralPredictor:
         
         print(f"[NeuralPredictor] Treinamento concluído. Loss: {final_loss:.4f}, MAE: {final_mae:.2f} min")
     
-    def predict(self, order, distance: float) -> float:
+    def predict(self, order, distance: float, bad_road_ratio: float = 0.0) -> float:
         """Prediz tempo de entrega para um pedido usando RNA treinada.
         
         Args:
             order: Objeto Order com atributos weight, is_fragile
             distance: Distância em metros até o destino
+            bad_road_ratio: ✅ Proporção de estradas ruins no trajeto (0.0 a 1.0)
             
         Returns:
             Tempo estimado de entrega em minutos
@@ -165,8 +188,8 @@ class NeuralPredictor:
         fragil = 1 if order.is_fragile else 0
         trafego = random.uniform(0.3, 0.8)  # Simula API de tráfego
         
-        # Monta vetor de features
-        features = np.array([[hora, dia, distancia_km, peso, fragil, trafego]])
+        # ✅ Monta vetor com 7 features (incluindo bad_road_ratio)
+        features = np.array([[hora, dia, distancia_km, peso, fragil, trafego, bad_road_ratio]])
         
         # Normaliza e prediz
         features_scaled = self.scaler_X.transform(features)

@@ -39,6 +39,36 @@ class AStarNavigator:
         except (KeyError, TypeError):
             # Fallback to 0 if coordinates are missing
             return 0.0
+    
+    def check_if_bad_road_is_unavoidable(self, start_node: int, end_node: int) -> bool:
+        """Verifica se é IMPOSSÍVEL chegar ao destino sem passar por obstáculos.
+        
+        Retorna True se o único caminho possível tiver asfalto ruim ou bloqueios.
+        
+        Args:
+            start_node: Nó inicial
+            end_node: Nó de destino
+            
+        Returns:
+            True se não existe caminho seguro (sem bad roads ou bloqueios)
+        """
+        def is_safe_edge(u, v, k):
+            """Verifica se uma aresta é segura (sem bloqueios ou pavimento ruim)."""
+            try:
+                data = self.graph.edges[u, v, k]
+                if data.get('road_block', False):
+                    return False
+                if data.get('pavement_quality') == 'bad':
+                    return False
+                return True
+            except (KeyError, TypeError):
+                return True
+        
+        # Cria subgrafo apenas com ruas boas
+        safe_graph = nx.subgraph_view(self.graph, filter_edge=is_safe_edge)
+        
+        # Verifica se existe caminho no grafo seguro
+        return not nx.has_path(safe_graph, start_node, end_node)
 
     def get_path(self, start_node: int, end_node: int, is_fragile: bool = False) -> List[int]:
         """Find the optimal path between two nodes considering constraints.

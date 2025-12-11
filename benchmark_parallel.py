@@ -74,7 +74,9 @@ def run_benchmark_parallel():
     print("=" * 60)
     
     # Configuration
-    test_cases = list(range(5, 21))  # 2 to 20 orders
+    # test_cases = list(range(5, 21))  # 2 to 20 orders
+    test_cases = list(range(15, 21))  # 2 to 20 orders
+
     map_seed = 123
     order_seed = 999
     
