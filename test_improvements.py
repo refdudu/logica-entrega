@@ -197,16 +197,19 @@ def test_neural_predictor():
         from src.ai.neural import NeuralPredictor
         from src.models.order import Order
         
-        neural = NeuralPredictor()
+        neural = NeuralPredictor(seed=42)
         order = Order(1, 123, 60, 5.0, False, 0)
         
-        neural.predict(order, distance=2.0, traffic=0.5)
+        # New API: predict(order, distance) - distance in meters
+        predicted_time = neural.predict(order, distance=10000)  # 10km
         
-        assert hasattr(order, 'predicted_time'), "Order deve ter predicted_time"
-        assert order.predicted_time > 0, "Tempo previsto deve ser positivo"
+        assert predicted_time > 0, "Tempo previsto deve ser positivo"
+        assert predicted_time < 200, "Tempo deve ser razoável (<200min)"
+        assert hasattr(order, 'delivery_time_estimate'), "Order deve ter delivery_time_estimate"
+        assert order.delivery_time_estimate > 0, "Estimate deve ser positivo"
         assert order.risk_level in ["LOW", "MEDIUM", "HIGH", "UNKNOWN"], "Risk level inválido"
         
-        print(f"  ✅ NeuralPredictor funcionando (predicted_time={order.predicted_time:.1f}min)")
+        print(f"  ✅ NeuralPredictor funcionando (estimate={order.delivery_time_estimate:.1f}min)")
         return True
     except Exception as e:
         print(f"  ❌ Erro: {e}")

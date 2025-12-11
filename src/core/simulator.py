@@ -96,7 +96,7 @@ class Simulator:
                 self.depot_node, order.node_id, is_fragile=False
             )
             self.fuzzy.calculate(order, dist if dist != float('inf') else 5000)
-            self.neural.predict(order)
+            self.neural.predict(order, dist if dist != float('inf') else 5000)
         
         # 2. Optimize route with Genetic Algorithm
         print("Optimizing route (Genetic Algorithm)...")

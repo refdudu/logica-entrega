@@ -1,30 +1,30 @@
 ============================================================
 RELATÓRIO DE PERFORMANCE: LEGACY vs SMART
-Data: 2025-12-10 23:43:20
+Data: 2025-12-10 23:50:26
 ============================================================
 
 
 --- CENÁRIO: 5 PEDIDOS ---
-LEGACY -> Integridade: 67.2% | Tempo: 140min | Distância: 7.51km
-SMART  -> Integridade: 41.5% | Tempo: 18min | Distância: 6.27km
-🏆 Vencedor: Legacy
+LEGACY -> Integridade: 64.6% | Tempo: 142min | Distância: 7.51km
+SMART  -> Integridade: 74.8% | Tempo: 135min | Distância: 5.78km
+🏆 Vencedor: Smart
 -----------------------------------
 
 --- CENÁRIO: 10 PEDIDOS ---
-LEGACY -> Integridade: 59.6% | Tempo: 47min | Distância: 17.54km
-SMART  -> Integridade: 56.2% | Tempo: 34min | Distância: 12.44km
+LEGACY -> Integridade: 63.6% | Tempo: 48min | Distância: 17.54km
+SMART  -> Integridade: 53.2% | Tempo: 154min | Distância: 12.77km
 🏆 Vencedor: Legacy
 -----------------------------------
 
 --- CENÁRIO: 15 PEDIDOS ---
-LEGACY -> Integridade: 55.5% | Tempo: 309min | Distância: 26.01km
-SMART  -> Integridade: 49.9% | Tempo: 48min | Distância: 17.85km
-🏆 Vencedor: Legacy
+LEGACY -> Integridade: 49.2% | Tempo: 191min | Distância: 26.01km
+SMART  -> Integridade: 69.4% | Tempo: 285min | Distância: 17.06km
+🏆 Vencedor: Smart
 -----------------------------------
 
 --- CENÁRIO: 20 PEDIDOS ---
-LEGACY -> Integridade: 57.1% | Tempo: 573min | Distância: 34.61km
-SMART  -> Integridade: 58.6% | Tempo: 61min | Distância: 22.26km
+LEGACY -> Integridade: 58.0% | Tempo: 455min | Distância: 34.61km
+SMART  -> Integridade: 70.4% | Tempo: 56min | Distância: 20.82km
 🏆 Vencedor: Smart
 -----------------------------------
 
@@ -32,8 +32,8 @@ SMART  -> Integridade: 58.6% | Tempo: 61min | Distância: 22.26km
 ============================================================
 RESUMO GERAL
 ============================================================
-Vitórias Smart:  1
-Vitórias Legacy: 3
-Taxa de sucesso Smart: 25%
+Vitórias Smart:  3
+Vitórias Legacy: 1
+Taxa de sucesso Smart: 75%
 
 ============================================================
