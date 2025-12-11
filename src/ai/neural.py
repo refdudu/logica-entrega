@@ -63,7 +63,7 @@ class NeuralPredictor:
         self._train()
         self.initialized = True
     
-    def _generate_training_data(self, n_samples: int = 1000) -> tuple:
+    def _generate_training_data(self, n_samples: int = 100000) -> tuple:
         """Gera dataset sintético realista para treinamento.
         
         Features:
