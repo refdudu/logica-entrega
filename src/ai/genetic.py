@@ -87,7 +87,24 @@ class GeneticTSP:
                 position_factor = position / max(len(individual) - 1, 1)
                 priority_penalty += position_factor * (fuzzy_priority - 5.0) * 50
             
-            # ✅ ADICIONAR: Penalização por ordem ruim de frágeis
+            # 4. NEURAL NETWORK INTEGRATION
+            # Use risk_level from Neural Network predictions to prioritize at-risk deliveries
+            # HIGH risk = predicted_time > deadline (will be late)
+            # MEDIUM risk = predicted_time > 80% of deadline (might be late)
+            risk_level = getattr(order, 'risk_level', 'LOW')
+            position_factor = position / max(len(individual) - 1, 1)
+            
+            if risk_level == 'HIGH':
+                # Critical: Neural Network predicted this order WILL be late
+                # Heavily penalize if delivered late in the route
+                priority_penalty += 150 * position_factor
+            elif risk_level == 'MEDIUM':
+                # Warning: Neural Network predicted this order MIGHT be late
+                # Moderate penalty for late delivery
+                priority_penalty += 75 * position_factor
+            # LOW risk = no penalty (Neural Network predicts on-time delivery)
+            
+            # 5. FRAGILE CARGO ORDERING
             # Frágeis devem ser entregues na primeira metade da rota
             if order.is_fragile:
                 # Se frágil vem depois da metade da rota, penaliza fortemente

@@ -14,6 +14,16 @@ from functools import partial
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Ensure UTF-8 stdout/stderr on Windows consoles (prevents UnicodeEncodeError)
+try:
+    if sys.stdout.encoding is None or sys.stdout.encoding.lower() != "utf-8":
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
 from src.core.map_manager import MapManager
 from src.core.simulator import Simulator
 from src.utils.order_generator import generate_test_orders
