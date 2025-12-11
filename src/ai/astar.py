@@ -60,8 +60,10 @@ class AStarNavigator:
             pavement_penalty = 1.0
             if d.get('pavement_quality') == 'bad':
                 if is_fragile:
-                    return float('inf')  # Fragile cargo cannot go on bad pavement
-                pavement_penalty = 1.4  # 40% slower
+                    # Massive penalty but still navigable as last resort
+                    pavement_penalty = 5000.0
+                else:
+                    pavement_penalty = 1.4  # 40% slower
 
             # 3. Traffic
             traffic_factor = 1.0 + d.get('traffic_level', 0.0)
@@ -104,8 +106,10 @@ class AStarNavigator:
             pavement_penalty = 1.0
             if d.get('pavement_quality') == 'bad':
                 if is_fragile:
-                    return float('inf')
-                pavement_penalty = 1.4
+                    # Massive penalty but still navigable as last resort
+                    pavement_penalty = 5000.0
+                else:
+                    pavement_penalty = 1.4
 
             traffic_factor = 1.0 + d.get('traffic_level', 0.0)
             travel_time = d.get('travel_time', 1.0)

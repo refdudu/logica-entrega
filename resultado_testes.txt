@@ -1,30 +1,30 @@
 ============================================================
 RELATÓRIO DE PERFORMANCE: LEGACY vs SMART
-Data: 2025-12-10 23:12:52
+Data: 2025-12-10 23:24:25
 ============================================================
 
 
 --- CENÁRIO: 5 PEDIDOS ---
-LEGACY -> Integridade: 60.6% | Tempo: 140min | Distância: 7.51km
-SMART  -> Integridade: 81.3% | Tempo: 16min | Distância: 6.51km
+LEGACY -> Integridade: 60.3% | Tempo: 139min | Distância: 7.51km
+SMART  -> Integridade: 73.2% | Tempo: 15min | Distância: 5.78km
 🏆 Vencedor: Smart
 -----------------------------------
 
 --- CENÁRIO: 10 PEDIDOS ---
-LEGACY -> Integridade: 56.3% | Tempo: 46min | Distância: 17.54km
-SMART  -> Integridade: 70.6% | Tempo: 36min | Distância: 13.57km
+LEGACY -> Integridade: 54.2% | Tempo: 48min | Distância: 17.54km
+SMART  -> Integridade: 58.1% | Tempo: 155min | Distância: 12.70km
 🏆 Vencedor: Smart
 -----------------------------------
 
 --- CENÁRIO: 15 PEDIDOS ---
-LEGACY -> Integridade: 52.7% | Tempo: 308min | Distância: 26.01km
-SMART  -> Integridade: 64.6% | Tempo: 53min | Distância: 19.71km
+LEGACY -> Integridade: 48.3% | Tempo: 430min | Distância: 26.01km
+SMART  -> Integridade: 64.6% | Tempo: 288min | Distância: 18.20km
 🏆 Vencedor: Smart
 -----------------------------------
 
 --- CENÁRIO: 20 PEDIDOS ---
-LEGACY -> Integridade: 61.4% | Tempo: 569min | Distância: 34.61km
-SMART  -> Integridade: 67.6% | Tempo: 68min | Distância: 25.52km
+LEGACY -> Integridade: 53.3% | Tempo: 576min | Distância: 34.61km
+SMART  -> Integridade: 67.7% | Tempo: 418min | Distância: 21.73km
 🏆 Vencedor: Smart
 -----------------------------------
 

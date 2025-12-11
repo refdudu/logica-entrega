@@ -60,8 +60,8 @@ class MapManager:
         obstacle_count = {'bad_pavement': 0, 'road_blocks': 0}
         
         for u, v, k, data in graph.edges(keys=True, data=True):
-            # 10% chance of bad pavement (potholes) - reduced for better gameplay
-            if random.random() < 0.10:
+            # 8% chance of bad pavement (potholes) - reduced for connectivity
+            if random.random() < 0.08:
                 data['pavement_quality'] = 'bad'
                 obstacle_count['bad_pavement'] += 1
             elif 'pavement_quality' not in data:

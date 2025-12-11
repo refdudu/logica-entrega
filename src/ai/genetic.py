@@ -32,12 +32,12 @@ class GeneticTSP:
         self.progress_callback = progress_callback
 
     def _calculate_fitness(self, individual: List[int]) -> float:
-        """Calculate fitness score integrating travel cost, fuzzy priority, and fragility.
+        """Calculate fitness score with accumulated fragility tracking.
         
         The fitness function optimizes for:
-        1. Routes that deliver high-priority orders early
-        2. Routes that deliver fragile items later (reduces detour penalty)
-        3. Minimizing total travel cost
+        1. Minimizing total travel cost
+        2. Delivering fragile items later (fragility 'infects' the truck)
+        3. Intelligent capacity management
         
         Args:
             individual: Sequence of order indices representing a route
@@ -45,71 +45,55 @@ class GeneticTSP:
         Returns:
             Fitness score (higher is better)
         """
-        total_score = 0.0
+        total_cost = 0.0
         current_node = self.depot_node
         current_load = 0.0
-        current_time = 0.0  # Accumulated time for priority penalty calculation
-        fragile_position_penalty = 0.0  # Penalty for fragile items delivered early
         
-        total_orders = len(individual)
+        # Track if we HAVE fragile cargo in the truck right now
+        # Once we pick up a fragile item, all subsequent routes must be fragile-safe
+        has_fragile_cargo = False
         
-        # Iterate through the sequence of orders
-        for position, order_index in enumerate(individual):
+        for order_index in individual:
             order = self.orders[order_index]
             
-            # Check capacity constraint
+            # 1. Capacity check (existing logic)
             if current_load + order.weight > self.truck_capacity:
-                # Return to depot to unload
+                # Return to depot with current fragility state
                 cost_to_depot = self.astar_engine.get_path_cost(
-                    current_node, self.depot_node, is_fragile=False
+                    current_node, self.depot_node, is_fragile=has_fragile_cargo
                 )
-                total_score += cost_to_depot
-                current_time += cost_to_depot
-                
+                total_cost += cost_to_depot
                 current_node = self.depot_node
                 current_load = 0.0
+                has_fragile_cargo = False  # Unloaded everything
             
-            # Travel to order location
-            is_fragile_trip = order.is_fragile
+            # 2. Travel cost to order location
+            # KEY INSIGHT: Trip is fragile if the NEW order is fragile OR we already have fragile cargo
+            trip_is_fragile = order.is_fragile or has_fragile_cargo
+            
             travel_cost = self.astar_engine.get_path_cost(
-                current_node, order.node_id, is_fragile=is_fragile_trip
+                current_node, order.node_id, is_fragile=trip_is_fragile
             )
             
-            # Update cumulative metrics
-            total_score += travel_cost
-            current_time += travel_cost
+            # High cost paths (from A* penalties) will make the GA avoid this route
+            total_cost += travel_cost
             
-            # ** FUZZY INTEGRATION: Priority-based penalty **
-            # High-priority orders (fuzzy_priority near 10) get heavy penalties if delivered late
-            # This encourages the GA to place urgent orders early in the route
-            priority_weight = getattr(order, 'fuzzy_priority', 5.0)
-            time_penalty = current_time * (priority_weight / 5.0)
-            total_score += time_penalty
-            
-            # ** FRAGILITY OPTIMIZATION: Position-based penalty **
-            # Fragile items delivered early in the route add penalty
-            # This encourages delivering fragile items later, reducing total detour distance
-            if order.is_fragile:
-                # Higher penalty for fragile items in early positions
-                # Position 0 = highest penalty, last position = no penalty
-                position_ratio = 1.0 - (position / max(total_orders - 1, 1))
-                fragile_position_penalty += position_ratio * 50.0  # Base penalty of 50
-            
-            # Update state
+            # 3. Update truck state
             current_node = order.node_id
             current_load += order.weight
             
+            # If we picked up a fragile item, truck is now "infected" with fragility
+            # until we return to depot
+            if order.is_fragile:
+                has_fragile_cargo = True
+        
         # Return to depot at end
-        final_cost = self.astar_engine.get_path_cost(
-            current_node, self.depot_node, is_fragile=False
+        total_cost += self.astar_engine.get_path_cost(
+            current_node, self.depot_node, is_fragile=has_fragile_cargo
         )
-        total_score += final_cost
         
-        # Add fragile position penalty to total score
-        total_score += fragile_position_penalty
-        
-        # Convert to fitness (minimize total_score)
-        return 1.0 / (total_score + 1e-6)
+        # Convert to fitness (minimize total_cost)
+        return 1.0 / (total_cost + 1e-6)
 
     def solve(self) -> List[int]:
         """Execute the genetic algorithm to find optimal route.
